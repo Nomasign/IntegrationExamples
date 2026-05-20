@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+
+# .NET
+bin/
+obj/
+
+# Environment (contains secrets)
+.env
+.env.local
+
+# IDE
+.vs/
+.vscode/
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
