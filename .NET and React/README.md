@@ -4,44 +4,48 @@ A full-stack example app that demonstrates sending documents for signature and r
 
 ## Prerequisites
 
-- .NET 8 SDK
-- Node.js 18+
-- pnpm
-- A NomaSign account (Business plan or higher)
+You need a NomaSign account with integration access and the credentials described below.
 
-## What you need from NomaSign
+### 1. Create a NomaSign Account
 
-Before running this example you need two credentials from your NomaSign account:
+Sign up at [nomasign.com](https://www.nomasign.com) and select a **Business** plan or higher (integration features are not available on the Free plan).
 
-### 1. Refresh Token
-
-The refresh token allows your backend to exchange for short-lived access tokens without user interaction.
-
-**To generate one:**
+### 2. Enable Integration
 
 1. Log in to [app.nomasign.com](https://app.nomasign.com)
 2. Navigate to **Integration** in the sidebar
-3. Click **Generate Token**
-4. Copy the token immediately — it's only shown once
+3. Follow the prompts to activate your integration profile — this provisions your API access and enables the token/webhook management UI
 
-### 2. Webhook Secret (HMAC)
+### 3. Generate a Refresh Token
 
-The webhook secret is used to verify that incoming webhook payloads genuinely come from NomaSign (HMAC-SHA256 signature validation).
+The refresh token allows your backend to exchange for short-lived access tokens without user interaction.
 
-**To get your secret:**
+1. On the Integration page, click **Generate Token**
+2. Copy the token immediately — it's only shown once
+3. Store it securely (treat it like a password)
 
-1. In the Integration page, scroll to the **Webhooks** section
-2. Create or edit a webhook endpoint
-3. Set the URL to your backend's webhook endpoint (e.g. `https://your-tunnel.dev/api/webhooks/nomasign`)
+### 4. Configure a Webhook + Secret (HMAC)
+
+The webhook secret is used to verify that incoming payloads genuinely come from NomaSign (HMAC-SHA256 signature validation).
+
+1. Scroll to the **Webhooks** section on the Integration page
+2. Create a webhook endpoint — set the URL to your backend (e.g. `https://your-tunnel.dev/api/webhooks/nomasign`)
+3. Select which events to subscribe to (e.g. Session Completed, Participant Signed)
 4. Copy the **Signing Secret** shown in the webhook credentials section
 
-### 3. A Signing Template
+### 5. Create a Signing Template
 
 You need at least one signing template to send documents via the API.
 
 1. Go to **Templates** in the sidebar
 2. Create a template with at least one recipient placeholder and signature field
 3. Note the template ID (visible in the URL or via the API)
+
+## Technical Prerequisites
+
+- .NET 8 SDK
+- Node.js 18+
+- pnpm
 
 ## Configuration
 
