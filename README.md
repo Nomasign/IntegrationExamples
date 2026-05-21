@@ -8,14 +8,12 @@ A full-stack example showing how to integrate with the NomaSign signing platform
 graph LR
     UI["Example FE App<br/>(localhost:3000)"] --> Backend["Example BE App<br/>(localhost:5203)"]
     Backend --> API["NomaSign Integration API<br/>(localhost:3010)"]
-    API --> Webhook["NomaSign<br/>(webhook push)"]
-    Webhook -->|"POST /api/webhooks/nomasign"| Backend
 
-    subgraph NomaSign Internal
-        direction LR
+    subgraph NomaSign["NomaSign Internal"]
         API
-        Webhook
     end
+
+    NomaSign -->|"POST /api/webhooks/nomasign"| Backend
 ```
 
 ## What's demonstrated
