@@ -4,18 +4,11 @@ A full-stack example showing how to integrate with the NomaSign signing platform
 
 ## Architecture
 
-```
-┌─────────────────┐       ┌──────────────────┐       ┌──────────────────────────┐
-│  Next.js UI     │──────▶│  ASP.NET Backend  │──────▶│  NomaSign Integration API │
-│  (localhost:3000)│       │  (localhost:5203) │       │  (localhost:3010)         │
-└─────────────────┘       └──────────────────┘       └──────────────────────────┘
-                                   ▲
-                                   │ POST /api/webhooks/nomasign
-                                   │
-                          ┌────────┴────────┐
-                          │   NomaSign      │
-                          │   (webhook push)│
-                          └─────────────────┘
+```mermaid
+graph LR
+    UI["Next.js UI<br/>(localhost:3000)"] --> Backend["ASP.NET Backend<br/>(localhost:5203)"]
+    Backend --> API["NomaSign Integration API<br/>(localhost:3010)"]
+    NomaSign["NomaSign<br/>(webhook push)"] -->|"POST /api/webhooks/nomasign"| Backend
 ```
 
 ## What's demonstrated
