@@ -1,26 +1,68 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: "Poppins", sans-serif;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222 47% 11%;
+
+  --muted: 220 14% 96%;
+  --muted-foreground: 220 10% 45%;
+
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+
+  --primary: 213 64% 21%;
+  --primary-foreground: 210 40% 98%;
+
+  --secondary: 43 96% 55%;
+  --secondary-foreground: 222 47% 11%;
+
+  --accent: 193 100% 22%;
+  --accent-foreground: 210 40% 98%;
+
+  --destructive: 4 60% 50%;
+  --destructive-foreground: 210 40% 98%;
+
+  --success: 150 50% 38%;
+  --success-foreground: 210 40% 98%;
+
+  --ring: 213 64% 21%;
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-ring: hsl(var(--ring));
+  --font-sans: "Poppins", sans-serif;
+  --font-mono: var(--font-geist-mono);
 }

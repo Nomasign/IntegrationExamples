@@ -13,6 +13,7 @@ type WebhookEvent = {
 };
 
 export function IntegrationDemo() {
+  const [refreshToken, setRefreshToken] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [webhooks, setWebhooks] = useState<WebhookEvent[]>([]);
@@ -25,8 +26,16 @@ export function IntegrationDemo() {
   });
 
   async function authenticate() {
+    if (!refreshToken.trim()) {
+      setStatus("Please paste your refresh token first");
+      return;
+    }
     setStatus("Authenticating...");
-    const res = await fetch(`${API}/api/nomasign/token`, { method: "POST" });
+    const res = await fetch(`${API}/api/nomasign/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken: refreshToken.trim() }),
+    });
     if (!res.ok) {
       setStatus(`Auth failed: ${res.statusText}`);
       return;
@@ -90,42 +99,55 @@ export function IntegrationDemo() {
     <div className="flex flex-col gap-6">
       {/* Status banner */}
       {status && (
-        <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
+        <div className="rounded-md border border-border bg-muted px-4 py-2 text-sm text-muted-foreground">
           {status}
         </div>
       )}
 
       {/* Step 1: Authenticate */}
-      <section className="rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold">1. Authenticate</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          Exchange your refresh token for an access token via{" "}
-          <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">
+      <section className="rounded-lg border border-border bg-card p-6">
+        <h2 className="text-lg font-semibold text-card-foreground">
+          1. Authenticate
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Paste your refresh token below and exchange it for an access token via{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
             POST /connect/token
           </code>
           .
         </p>
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            onClick={authenticate}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Get Access Token
-          </button>
-          {token && (
-            <span className="text-sm font-medium text-green-600">
-              ✓ Authenticated
-            </span>
-          )}
+        <div className="mt-4 flex flex-col gap-3">
+          <input
+            type="password"
+            placeholder="Paste your refresh token here"
+            value={refreshToken}
+            onChange={(e) => setRefreshToken(e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={authenticate}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              Get Access Token
+            </button>
+            {token && (
+              <span className="text-sm font-medium text-success">
+                ✓ Authenticated
+              </span>
+            )}
+          </div>
         </div>
       </section>
 
       {/* Step 2: List Templates */}
-      <section className="rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold">2. List Templates</h2>
-        <p className="mt-1 text-sm text-gray-500">
+      <section className="rounded-lg border border-border bg-card p-6">
+        <h2 className="text-lg font-semibold text-card-foreground">
+          2. List Templates
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
           Fetch available signing templates via{" "}
-          <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
             GET /api/templates
           </code>
           .
@@ -134,28 +156,30 @@ export function IntegrationDemo() {
           <button
             onClick={loadTemplates}
             disabled={!token}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Load Templates
           </button>
           {templates.length > 0 && (
-            <ul className="mt-4 divide-y divide-gray-100">
+            <ul className="mt-4 divide-y divide-border">
               {templates.map((t) => (
                 <li
                   key={t.id}
                   className="flex items-center justify-between py-2"
                 >
                   <div>
-                    <span className="font-mono text-xs text-gray-400">
+                    <span className="font-mono text-xs text-muted-foreground">
                       {t.id}
                     </span>
-                    <span className="ml-2 text-sm">{t.title}</span>
+                    <span className="ml-2 text-sm text-foreground">
+                      {t.title}
+                    </span>
                   </div>
                   <button
                     onClick={() =>
                       setSendForm((f) => ({ ...f, templateId: t.id }))
                     }
-                    className="rounded border border-gray-300 px-2 py-1 text-xs font-medium hover:bg-gray-50"
+                    className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted transition-colors"
                   >
                     Use
                   </button>
@@ -167,11 +191,13 @@ export function IntegrationDemo() {
       </section>
 
       {/* Step 3: Send Template */}
-      <section className="rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold">3. Send for Signature</h2>
-        <p className="mt-1 text-sm text-gray-500">
+      <section className="rounded-lg border border-border bg-card p-6">
+        <h2 className="text-lg font-semibold text-card-foreground">
+          3. Send for Signature
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
           Instantiate a template and send it to a recipient via{" "}
-          <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
             POST /api/templates/:id/send
           </code>
           .
@@ -183,7 +209,7 @@ export function IntegrationDemo() {
             onChange={(e) =>
               setSendForm((f) => ({ ...f, templateId: e.target.value }))
             }
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
           />
           <input
             placeholder="Recipient label (e.g. Recipient 1)"
@@ -191,7 +217,7 @@ export function IntegrationDemo() {
             onChange={(e) =>
               setSendForm((f) => ({ ...f, label: e.target.value }))
             }
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
           />
           <input
             placeholder="Recipient name"
@@ -199,7 +225,7 @@ export function IntegrationDemo() {
             onChange={(e) =>
               setSendForm((f) => ({ ...f, name: e.target.value }))
             }
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
           />
           <input
             placeholder="Recipient email"
@@ -207,12 +233,12 @@ export function IntegrationDemo() {
             onChange={(e) =>
               setSendForm((f) => ({ ...f, email: e.target.value }))
             }
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
           />
           <button
             onClick={sendTemplate}
             disabled={!token}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Send
           </button>
@@ -220,11 +246,13 @@ export function IntegrationDemo() {
       </section>
 
       {/* Step 4: Webhook Events */}
-      <section className="rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold">4. Webhook Events</h2>
-        <p className="mt-1 text-sm text-gray-500">
+      <section className="rounded-lg border border-border bg-card p-6">
+        <h2 className="text-lg font-semibold text-card-foreground">
+          4. Webhook Events
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
           When signing completes, NomaSign POSTs to{" "}
-          <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
             /api/webhooks/nomasign
           </code>
           .
@@ -232,22 +260,25 @@ export function IntegrationDemo() {
         <div className="mt-4">
           <button
             onClick={loadWebhooks}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
           >
             Refresh
           </button>
           {webhooks.length > 0 ? (
             <ul className="mt-4 space-y-1">
               {webhooks.map((w) => (
-                <li key={w.id} className="font-mono text-xs text-gray-600">
+                <li
+                  key={w.id}
+                  className="font-mono text-xs text-muted-foreground"
+                >
                   [{new Date(w.createdAt).toLocaleTimeString()}]{" "}
-                  <strong className="text-gray-900">{w.type}</strong> — session{" "}
-                  {w.session?.id}
+                  <strong className="text-foreground">{w.type}</strong> —
+                  session {w.session?.id}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mt-3 text-sm text-gray-400">
+            <p className="mt-3 text-sm text-muted-foreground">
               No webhook events yet.
             </p>
           )}

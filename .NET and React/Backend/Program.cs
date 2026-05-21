@@ -46,6 +46,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 // Demonstrates: POST /connect/token (refresh_token grant)
 
 app.MapPost("/api/nomasign/token", async (
+    [FromBody] TokenRequest? body,
     IHttpClientFactory httpFactory,
     IConfiguration config,
     TokenCache tokenCache) =>
@@ -55,6 +56,9 @@ app.MapPost("/api/nomasign/token", async (
     if (cached != null)
         return Results.Ok(new { accessToken = cached, fromCache = true });
 
+    // Use the refresh token from the request body, or fall back to config.
+    var refreshToken = body?.RefreshToken ?? config["NomaSign:RefreshToken"]!;
+
     var client = httpFactory.CreateClient("NomaSign");
 
     var response = await client.PostAsync("/connect/token",
@@ -62,7 +66,7 @@ app.MapPost("/api/nomasign/token", async (
         {
             ["grant_type"] = "refresh_token",
             ["client_id"] = config["NomaSign:ClientId"]!,
-            ["refresh_token"] = config["NomaSign:RefreshToken"]!
+            ["refresh_token"] = refreshToken
         }));
 
     if (!response.IsSuccessStatusCode)
@@ -248,6 +252,7 @@ static bool VerifySignature(string payload, string? signatureHeader, string secr
 
 // ─── MODELS ───────────────────────────────────────────────────────────────────
 
+record TokenRequest(string? RefreshToken);
 record TokenResponse(string AccessToken, int ExpiresIn, string TokenType);
 
 record SendRecipient(string Label, string Name, string Email);
