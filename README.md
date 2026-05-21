@@ -2,53 +2,38 @@
 
 A full-stack example showing how to integrate with the NomaSign signing platform using the Integration API.
 
-## Architecture
-
-```mermaid
-graph LR
-    UI["Example FE App<br/>(localhost:3000)"] --> Backend["Example BE App<br/>(localhost:5203)"]
-    Backend --> API["NomaSign Integration API<br/>(localhost:3010)"]
-
-    subgraph NomaSign["NomaSign Internal"]
-        API
-    end
-
-    NomaSign -->|"POST /api/webhooks/nomasign"| Backend
-```
-
-## What's demonstrated
-
-1. **Token Exchange** — Acquire an access token using a refresh token (`POST /connect/token`)
-2. **List Templates** — Fetch available signing templates (`GET /api/templates`)
-3. **Send for Signature** — Instantiate a template with real recipients (`POST /api/templates/{id}/send`)
-4. **Webhook Receiver** — Receive and validate signed webhook notifications (HMAC-SHA256)
-
 ## Prerequisites
+
+Before running the example app, you need a NomaSign integration account with a **Refresh Token** and **Webhook Secret**.
+
+👉 **[Follow the integration setup guide on nomasign.com](https://www.nomasign.com/integrate)** to create your account and generate credentials.
+
+You'll also need at least one **Signing Template** — go to **Templates** in the web app, create a template with at least one recipient placeholder and signature field.
+
+## Technical Requirements
 
 - .NET 8 SDK
 - Node.js 18+
 - pnpm
-- A NomaSign account with:
-  - A refresh token (generated via the Integration page in the web-app)
-  - A webhook secret (configured in the webhook settings)
-  - At least one signing template
 
 ## Setup
 
 ### 1. Configure the backend
 
-Edit `.NET and React/Backend/appsettings.json`:
+Edit `.NET and React/Backend/appsettings.json` with your credentials:
 
 ```json
 {
   "NomaSign": {
-    "BaseUrl": "http://localhost:3010",
+    "BaseUrl": "https://integration-api.nomasign.com",
     "ClientId": "nomasign-integration",
     "RefreshToken": "paste-your-refresh-token-here",
     "WebhookSecret": "paste-your-webhook-secret-here"
   }
 }
 ```
+
+> **Local development:** If running against a local instance of the Integration API, use `http://localhost:3010` as the BaseUrl.
 
 ### 2. Run the backend
 
@@ -77,7 +62,11 @@ In the NomaSign web-app Integration page, set your webhook endpoint to:
 http://localhost:5203/api/webhooks/nomasign
 ```
 
-> **Note:** For local development, you'll need a tunnel (e.g. dev tunnels, ngrok) so NomaSign can reach your localhost.
+> **Note:** For local development, you'll need a tunnel (e.g. [VS Code Dev Tunnels](https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/), [ngrok](https://ngrok.com/)) so NomaSign can reach your localhost.
+
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the system diagram and a breakdown of what's demonstrated.
 
 ## Key files
 
