@@ -6,9 +6,15 @@ A full-stack example showing how to integrate with the NomaSign signing platform
 
 ```mermaid
 graph LR
-    UI["Example App UI<br/>(localhost:3000)"] --> Backend["Example C# App<br/>(localhost:5203)"]
+    UI["Example FE App<br/>(localhost:3000)"] --> Backend["Example BE App<br/>(localhost:5203)"]
     Backend --> API["NomaSign Integration API<br/>(localhost:3010)"]
-    NomaSign["NomaSign<br/>(webhook push)"] -->|"POST /api/webhooks/nomasign"| Backend
+
+    subgraph NomaSign Internal
+        API
+        Webhook["NomaSign<br/>(webhook push)"]
+    end
+
+    Webhook -->|"POST /api/webhooks/nomasign"| Backend
 ```
 
 ## What's demonstrated
