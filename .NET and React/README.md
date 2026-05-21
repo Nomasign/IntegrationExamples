@@ -69,7 +69,7 @@ Edit `Backend/appsettings.json` with your credentials:
 ### Backend
 
 ```bash
-cd Backend
+cd ".NET and React/Backend"
 dotnet run
 ```
 
@@ -78,7 +78,7 @@ The API starts on `http://localhost:5203`. Swagger UI is available at `http://lo
 ### Frontend
 
 ```bash
-cd frontend
+cd ".NET and React/frontend"
 pnpm install
 pnpm dev
 ```
