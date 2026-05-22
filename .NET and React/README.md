@@ -25,13 +25,12 @@ Edit `Backend/appsettings.json` with your credentials:
   "NomaSign": {
     "BaseUrl": "https://integration-api.nomasign.com",
     "ClientId": "nomasign-integration",
-    "RefreshToken": "paste-your-refresh-token-here",
     "WebhookSecret": "paste-your-webhook-secret-here"
   }
 }
 ```
 
-> **Local development:** If running against a local instance of the Integration API, use `http://localhost:3010` as the BaseUrl.
+> **Refresh Token:** You'll paste your refresh token directly into the example app UI — it's stored locally in your browser for this session only.
 
 ## Running
 

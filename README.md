@@ -6,9 +6,14 @@ A full-stack example showing how to integrate with the NomaSign signing platform
 
 Before running the example app, you need a NomaSign integration account with a **Refresh Token** and **Webhook Secret**.
 
-👉 **[Follow the integration setup guide on nomasign.com](https://www.nomasign.com/integrate)** to create your account and generate credentials.
+👉 **[Follow the Integration Setup guide](./Integration%20Setup/README.md)** for step-by-step instructions with screenshots.
 
-You'll also need at least one **Signing Template** — go to **Templates** in the web app, create a template with at least one recipient placeholder and signature field.
+You'll need:
+
+- **A NomaSign account** with a plan that supports integrations ([app.nomasign.com](https://app.nomasign.com))
+- **An Integration account** — a dedicated email (e.g. `signing@yourdomain.com`) invited with the **Integrator** role
+- **At least one Signing Template** — with recipient placeholders and signature fields
+- **A Refresh Token & Webhook Secret** — generated from the Integration page
 
 ## Technical Requirements
 
@@ -27,13 +32,12 @@ Edit `.NET and React/Backend/appsettings.json` with your credentials:
   "NomaSign": {
     "BaseUrl": "https://integration-api.nomasign.com",
     "ClientId": "nomasign-integration",
-    "RefreshToken": "paste-your-refresh-token-here",
     "WebhookSecret": "paste-your-webhook-secret-here"
   }
 }
 ```
 
-> **Local development:** If running against a local instance of the Integration API, use `http://localhost:3010` as the BaseUrl.
+> **Refresh Token:** You'll paste your refresh token directly into the example app UI — it's stored locally in your browser for this session only.
 
 ### 2. Run the backend
 
