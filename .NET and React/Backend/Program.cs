@@ -12,12 +12,12 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Runtime settings (base URL changeable from the UI).
+var initialBaseUrl = builder.Configuration["NomaSign:BaseUrl"]!;
+builder.Services.AddSingleton(new RuntimeSettings(initialBaseUrl));
+
 // Integration API HTTP client.
-builder.Services.AddHttpClient<INomaSignClient, NomaSignClient>((sp, client) =>
-{
-    var config = sp.GetRequiredService<IConfiguration>();
-    client.BaseAddress = new Uri(config["NomaSign:BaseUrl"]!);
-});
+builder.Services.AddHttpClient<INomaSignClient, NomaSignClient>();
 
 // Application services.
 builder.Services.AddSingleton<TokenCache>();

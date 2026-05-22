@@ -27,7 +27,7 @@ public class AuthController : ControllerBase
 
         try
         {
-            var result = await _nomaSignService.AuthenticateAsync(request.RefreshToken);
+            var result = await _nomaSignService.AuthenticateAsync(request.RefreshToken, request.ForceRefresh);
             return Ok(result);
         }
         catch (Exception ex)

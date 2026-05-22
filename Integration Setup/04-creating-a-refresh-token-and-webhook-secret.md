@@ -42,8 +42,8 @@ Click **Generate Tokens**. You'll receive:
 
 ---
 
----
-
 **Previous:** [← Creating a Signing Template](./03-creating-a-signing-template.md)
 
-**Done!** You now have everything you need. Head back to the [main README](../README.md) to run the example app.
+**Next:** [Receiving Webhook Notifications →](./05-receiving-webhook-notifications.md) *(optional — only needed if you want real-time event updates)*
+
+**Done with setup?** Head back to the [main README](../README.md) to run the example app.

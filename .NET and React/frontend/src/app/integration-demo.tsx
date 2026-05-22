@@ -1,29 +1,37 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { RequestBuilder, ApiResponse } from "./components/request-builder";
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:5203";
 const STORAGE_KEY = "nomasign_refresh_token";
 
 type Template = { id: string; title: string };
-type WebhookEvent = {
-  id: string;
-  type: string;
-  createdAt: string;
-  session?: { id: string };
-};
 
 export function IntegrationDemo() {
   const [refreshToken, setRefreshToken] = useState("");
   const [token, setToken] = useState<string | null>(null);
-  const [authResponse, setAuthResponse] = useState<{ raw: object; savedToken: string; fromCache: boolean } | null>(null);
-  const [templatesResponse, setTemplatesResponse] = useState<{ status: number; raw: object } | null>(null);
-  const [sendResponse, setSendResponse] = useState<{ status: number; raw: object } | null>(null);
-  const [webhooksResponse, setWebhooksResponse] = useState<{ status: number; raw: object } | null>(null);
+
+  // Responses
+  const [authResponse, setAuthResponse] = useState<ApiResponse>(null);
+  const [templatesResponse, setTemplatesResponse] = useState<ApiResponse>(null);
+  const [sendResponse, setSendResponse] = useState<ApiResponse>(null);
+  const [webhooksResponse, setWebhooksResponse] = useState<ApiResponse>(null);
+
+  // Loading states
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(false);
+  const [isSavingSecret, setIsSavingSecret] = useState(false);
+  const [isSavingBaseUrl, setIsSavingBaseUrl] = useState(false);
+
+  // Other state
+  const [baseUrl, setBaseUrl] = useState("");
+  const [baseUrlSaved, setBaseUrlSaved] = useState(false);
   const [webhookSecret, setWebhookSecret] = useState("");
   const [webhookSecretConfigured, setWebhookSecretConfigured] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [webhooks, setWebhooks] = useState<WebhookEvent[]>([]);
   const [status, setStatus] = useState("");
   const [backendStatus, setBackendStatus] = useState<"checking" | "online" | "offline">("checking");
   const [sendForm, setSendForm] = useState({
@@ -59,18 +67,16 @@ export function IntegrationDemo() {
       .catch(() => {});
   }, []);
 
-  async function saveWebhookSecret() {
-    if (!webhookSecret.trim()) return;
-    const res = await fetch(`${API}/api/config/webhook-secret`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret: webhookSecret }),
-    });
-    if (res.ok) {
-      setWebhookSecretConfigured(true);
-      setStatus("Webhook secret configured");
-    }
-  }
+  // Load current base URL from backend on mount.
+  useEffect(() => {
+    fetch(`${API}/api/config/base-url`)
+      .then((r) => r.json())
+      .then((d) => {
+        setBaseUrl(d.baseUrl ?? "");
+        setBaseUrlSaved(true);
+      })
+      .catch(() => {});
+  }, []);
 
   // Load saved refresh token from localStorage on mount.
   useEffect(() => {
@@ -87,12 +93,49 @@ export function IntegrationDemo() {
     setRefreshToken("");
   }
 
+  async function saveWebhookSecret() {
+    if (!webhookSecret.trim()) return;
+    setIsSavingSecret(true);
+    try {
+      const res = await fetch(`${API}/api/config/webhook-secret`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: webhookSecret }),
+      });
+      if (res.ok) {
+        setWebhookSecretConfigured(true);
+        setStatus("Webhook secret configured");
+      }
+    } finally {
+      setIsSavingSecret(false);
+    }
+  }
+
+  async function saveBaseUrl() {
+    if (!baseUrl.trim()) return;
+    setIsSavingBaseUrl(true);
+    setBaseUrlSaved(false);
+    try {
+      const res = await fetch(`${API}/api/config/base-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl: baseUrl.trim() }),
+      });
+      if (res.ok) {
+        setBaseUrlSaved(true);
+        setStatus(`Integration API URL set to ${baseUrl.trim()}`);
+      }
+    } finally {
+      setIsSavingBaseUrl(false);
+    }
+  }
+
   async function authenticate() {
     if (!refreshToken.trim()) {
       setStatus("Please paste your refresh token first");
       return;
     }
-    setStatus("Authenticating...");
+    setIsAuthenticating(true);
     setAuthResponse(null);
     try {
       const res = await fetch(`${API}/api/auth/token`, {
@@ -100,37 +143,27 @@ export function IntegrationDemo() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refreshToken: refreshToken.trim() }),
       });
+      const data = await res.json().catch(async () => {
+        const text = await res.text().catch(() => "");
+        return { status: res.status, statusText: res.statusText, body: text };
+      });
+      setAuthResponse({ status: res.status, raw: data });
       if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        let parsed: object | null = null;
-        try { parsed = JSON.parse(body); } catch { /* not JSON */ }
-        setAuthResponse({
-          raw: parsed ?? { status: res.status, statusText: res.statusText, body },
-          savedToken: null,
-          fromCache: false,
-        });
-        setStatus(`Auth failed (${res.status}): ${body || res.statusText}`);
+        setStatus(`Auth failed (${res.status})`);
         return;
       }
-      const data = await res.json();
       setToken(data.accessToken);
-      setAuthResponse({
-        raw: data,
-        savedToken: data.accessToken ?? null,
-        fromCache: data.fromCache ?? false,
-      });
       setStatus(data.fromCache ? "Token loaded (cached)" : "Token acquired");
     } catch (err) {
-      setStatus(
-        `Cannot reach backend at ${API}. Make sure the .NET server is running (dotnet run) and CORS is configured. Error: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
+      setAuthResponse({ status: 0, raw: { error: err instanceof Error ? err.message : String(err) } });
+      setStatus(`Cannot reach backend at ${API}`);
+    } finally {
+      setIsAuthenticating(false);
     }
   }
 
   async function loadTemplates() {
-    setStatus("Loading templates...");
+    setIsLoadingTemplates(true);
     setTemplatesResponse(null);
     try {
       const res = await fetch(`${API}/api/templates`);
@@ -145,6 +178,8 @@ export function IntegrationDemo() {
     } catch (err) {
       setTemplatesResponse({ status: 0, raw: { error: err instanceof Error ? err.message : String(err) } });
       setStatus(`Cannot reach backend at ${API}`);
+    } finally {
+      setIsLoadingTemplates(false);
     }
   }
 
@@ -153,7 +188,7 @@ export function IntegrationDemo() {
       setStatus("Template ID and email are required");
       return;
     }
-    setStatus("Sending...");
+    setIsSending(true);
     setSendResponse(null);
     try {
       const res = await fetch(
@@ -178,20 +213,22 @@ export function IntegrationDemo() {
     } catch (err) {
       setSendResponse({ status: 0, raw: { error: err instanceof Error ? err.message : String(err) } });
       setStatus(`Cannot reach backend at ${API}`);
+    } finally {
+      setIsSending(false);
     }
   }
 
   async function loadWebhooks() {
+    setIsLoadingWebhooks(true);
     setWebhooksResponse(null);
     try {
       const res = await fetch(`${API}/api/webhooks/log`);
       const data = await res.json().catch(() => ({}));
       setWebhooksResponse({ status: res.status, raw: data });
-      if (res.ok) {
-        setWebhooks(data);
-      }
     } catch (err) {
       setWebhooksResponse({ status: 0, raw: { error: err instanceof Error ? err.message : String(err) } });
+    } finally {
+      setIsLoadingWebhooks(false);
     }
   }
 
@@ -205,43 +242,62 @@ export function IntegrationDemo() {
         </div>
       )}
 
+      {/* Integration API base URL config */}
+      <section className="rounded-lg border border-border bg-card p-4">
+        <div className="flex items-center gap-3">
+          <label className="shrink-0 text-sm font-medium text-card-foreground">
+            Integration API URL
+          </label>
+          <input
+            placeholder="https://dev.integration.nomasign.com"
+            value={baseUrl}
+            onChange={(e) => { setBaseUrl(e.target.value); setBaseUrlSaved(false); }}
+            className="flex-1 rounded border border-input bg-background px-3 py-1.5 font-mono text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <button
+            onClick={saveBaseUrl}
+            disabled={!baseUrl.trim() || isSavingBaseUrl}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isSavingBaseUrl && (
+              <svg className="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            )}
+            Set
+          </button>
+          {baseUrlSaved && (
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">✓</span>
+          )}
+        </div>
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          All API calls from this demo go through this URL. Default: <code className="font-mono">https://dev.integration.nomasign.com</code>
+        </p>
+      </section>
+
+      {/* Status bar */}
+      {status && (
+        <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
+          {status}
+        </div>
+      )}
+
       {/* Step 1: Authenticate */}
       <section className="rounded-lg border border-border bg-card p-6">
         <h2 className="text-lg font-semibold text-card-foreground">
           1. Authenticate
         </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 mb-4 text-sm text-muted-foreground">
           Exchange your refresh token for an access token. This is what gets sent to the NomaSign API.
         </p>
 
-        {/* Request builder */}
-        <div className="mt-4 rounded-md border border-border overflow-hidden">
-          {/* Method + URL bar */}
-          <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-3 py-2">
-            <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-              POST
-            </span>
-            <span className="font-mono text-sm text-foreground">/api/auth/token</span>
-          </div>
-
-          {/* Headers */}
-          <div className="border-b border-border px-3 py-2">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
-              Headers
-            </p>
-            <div className="flex items-center gap-2 font-mono text-xs">
-              <span className="text-muted-foreground">Content-Type:</span>
-              <span className="text-foreground">application/json</span>
-            </div>
-          </div>
-
-          {/* Body parameters */}
-          <div className="px-3 py-3">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
-              Body
-            </p>
+        <RequestBuilder
+          method="POST"
+          url="/api/auth/token"
+          headers={[{ key: "Content-Type", value: "application/json" }]}
+          body={
             <div className="flex flex-col gap-2">
-              {/* refresh_token */}
               <div className="flex items-center gap-2">
                 <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
                   refreshToken
@@ -255,57 +311,41 @@ export function IntegrationDemo() {
                 />
               </div>
             </div>
-          </div>
-
-          {/* Send button */}
-          <div className="flex items-center gap-3 border-t border-border bg-muted/30 px-3 py-2">
-            <button
-              onClick={authenticate}
-              disabled={!refreshToken.trim()}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Send
-            </button>
-            {refreshToken && (
-              <button
-                onClick={clearRefreshToken}
-                className="rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-muted transition-colors"
-              >
-                Clear
-              </button>
-            )}
-            {token && (
-              <span className="text-sm font-medium text-success">
-                ✓ Authenticated
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Response */}
-        {authResponse && (
-          <div className="mt-4 rounded-md border border-border overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-3 py-2">
-              <span className={`rounded px-2 py-0.5 text-xs font-bold ${authResponse.savedToken ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"}`}>
-                {authResponse.savedToken ? "200 OK" : "Error"}
-              </span>
-              <span className="text-xs text-muted-foreground">Response</span>
-            </div>
-            <pre className="overflow-x-auto p-3 text-xs font-mono text-foreground bg-background">
-              {JSON.stringify(authResponse.raw, null, 2)}
-            </pre>
-            {authResponse.savedToken && (
+          }
+          onSend={authenticate}
+          disabled={!refreshToken.trim()}
+          loading={isAuthenticating}
+          extraActions={
+            <>
+              {refreshToken && (
+                <button
+                  onClick={clearRefreshToken}
+                  className="rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-muted transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+              {token && (
+                <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                  ✓ Authenticated
+                </span>
+              )}
+            </>
+          }
+          response={authResponse}
+          responseExtra={
+            authResponse?.status === 200 && (authResponse.raw as Record<string, unknown>).accessToken ? (
               <div className="border-t border-border bg-muted/30 px-3 py-2">
                 <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
                   Saved Access Token (used as Bearer token for subsequent requests)
                 </p>
                 <p className="font-mono text-xs text-foreground break-all">
-                  {authResponse.savedToken.slice(0, 30)}...{authResponse.savedToken.slice(-20)}
+                  {((authResponse.raw as Record<string, unknown>).accessToken as string).slice(0, 30)}...{((authResponse.raw as Record<string, unknown>).accessToken as string).slice(-20)}
                 </p>
               </div>
-            )}
-          </div>
-        )}
+            ) : undefined
+          }
+        />
       </section>
 
       {/* Step 2: List Templates */}
@@ -313,55 +353,20 @@ export function IntegrationDemo() {
         <h2 className="text-lg font-semibold text-card-foreground">
           2. List Templates
         </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 mb-4 text-sm text-muted-foreground">
           Fetch available signing templates from the Integration API.
         </p>
 
-        <div className="mt-4 rounded-md border border-border overflow-hidden">
-          {/* Method + URL bar */}
-          <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-3 py-2">
-            <span className="rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 px-2 py-0.5 text-xs font-bold">
-              GET
-            </span>
-            <span className="font-mono text-sm text-foreground">/api/templates</span>
-          </div>
-
-          {/* Info */}
-          <div className="border-b border-border px-3 py-2">
-            <p className="text-[10px] font-medium text-muted-foreground italic">
-              Backend adds Authorization header internally (token managed server-side)
-            </p>
-          </div>
-
-          {/* Send button */}
-          <div className="flex items-center gap-3 border-t border-border bg-muted/30 px-3 py-2">
-            <button
-              onClick={loadTemplates}
-              disabled={!token}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Send
-            </button>
-            {!token && (
-              <span className="text-xs text-muted-foreground">Authenticate first</span>
-            )}
-          </div>
-        </div>
-
-        {/* Response */}
-        {templatesResponse && (
-          <div className="mt-4 rounded-md border border-border overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-3 py-2">
-              <span className={`rounded px-2 py-0.5 text-xs font-bold ${templatesResponse.status === 200 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"}`}>
-                {templatesResponse.status === 0 ? "Network Error" : `${templatesResponse.status}`}
-              </span>
-              <span className="text-xs text-muted-foreground">Response</span>
-            </div>
-            <pre className="overflow-x-auto p-3 text-xs font-mono text-foreground bg-background max-h-64 overflow-y-auto">
-              {JSON.stringify(templatesResponse.raw, null, 2)}
-            </pre>
-          </div>
-        )}
+        <RequestBuilder
+          method="GET"
+          url="/api/templates"
+          info="Backend adds Authorization header internally (token managed server-side)"
+          onSend={loadTemplates}
+          disabled={!token}
+          disabledMessage="Authenticate first"
+          loading={isLoadingTemplates}
+          response={templatesResponse}
+        />
 
         {/* Template list for selection */}
         {templates.length > 0 && (
@@ -403,42 +408,16 @@ export function IntegrationDemo() {
         <h2 className="text-lg font-semibold text-card-foreground">
           3. Send for Signature
         </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 mb-4 text-sm text-muted-foreground">
           Instantiate a template and send it to a recipient.
         </p>
 
-        <div className="mt-4 rounded-md border border-border overflow-hidden">
-          {/* Method + URL bar */}
-          <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-3 py-2">
-            <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-              POST
-            </span>
-            <span className="font-mono text-sm text-foreground">
-              /api/templates/{sendForm.templateId || ":id"}/send
-            </span>
-          </div>
-
-          {/* Headers */}
-          <div className="border-b border-border px-3 py-2">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
-              Headers
-            </p>
-            <div className="flex flex-col gap-1 font-mono text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">Content-Type:</span>
-                <span className="text-foreground">application/json</span>
-              </div>
-            </div>
-            <p className="mt-1 text-[10px] text-muted-foreground italic">
-              Backend adds Authorization header internally
-            </p>
-          </div>
-
-          {/* Body parameters */}
-          <div className="px-3 py-3">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
-              Body
-            </p>
+        <RequestBuilder
+          method="POST"
+          url={`/api/templates/${sendForm.templateId || ":id"}/send`}
+          headers={[{ key: "Content-Type", value: "application/json" }]}
+          headerNote="Backend adds Authorization header internally"
+          body={
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
@@ -485,50 +464,47 @@ export function IntegrationDemo() {
                 />
               </div>
             </div>
-          </div>
-
-          {/* Send button */}
-          <div className="flex items-center gap-3 border-t border-border bg-muted/30 px-3 py-2">
-            <button
-              onClick={sendTemplate}
-              disabled={!token}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Send
-            </button>
-            {!token && (
-              <span className="text-xs text-muted-foreground">Authenticate first</span>
-            )}
-          </div>
-        </div>
-
-        {/* Response */}
-        {sendResponse && (
-          <div className="mt-4 rounded-md border border-border overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-3 py-2">
-              <span className={`rounded px-2 py-0.5 text-xs font-bold ${sendResponse.status >= 200 && sendResponse.status < 300 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"}`}>
-                {sendResponse.status === 0 ? "Network Error" : `${sendResponse.status}`}
-              </span>
-              <span className="text-xs text-muted-foreground">Response</span>
-            </div>
-            <pre className="overflow-x-auto p-3 text-xs font-mono text-foreground bg-background max-h-64 overflow-y-auto">
-              {JSON.stringify(sendResponse.raw, null, 2)}
-            </pre>
-          </div>
-        )}
+          }
+          onSend={sendTemplate}
+          disabled={!token}
+          disabledMessage="Authenticate first"
+          loading={isSending}
+          response={sendResponse}
+        />
       </section>
 
-      {/* Step 4: Webhook Events */}
-      <section className="rounded-lg border border-border bg-card p-6">
-        <h2 className="text-lg font-semibold text-card-foreground">
-          4. Webhook Events
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          When signing completes, NomaSign POSTs to your webhook endpoint. Check received events below.
+      {/* Step 4: Webhook Events (Optional) */}
+      <section className="rounded-lg border border-dashed border-border bg-card p-6">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-card-foreground">
+            4. Webhook Notifications
+          </h2>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Optional
+          </span>
+        </div>
+        <p className="mt-1 mb-4 text-sm text-muted-foreground">
+          When signing completes, NomaSign POSTs HMAC-signed events to your webhook endpoint.
+          This step requires your backend to be publicly reachable (deployed or via a tunnel like ngrok).
         </p>
 
+        <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-4 py-3">
+          <p className="text-sm font-medium text-foreground">📖 Webhook setup guide</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Learn how to receive and verify webhook events, configure HMAC secrets, and handle retries.
+          </p>
+          <a
+            href="https://github.com/Nomasign/IntegrationExamples/blob/main/Integration%20Setup/05-receiving-webhook-notifications.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+          >
+            Read the webhook guide →
+          </a>
+        </div>
+
         {/* HMAC Secret config */}
-        <div className="mt-4 rounded-md border border-border bg-muted/30 px-3 py-3">
+        <div className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-3">
           <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
             HMAC Secret {webhookSecretConfigured && <span className="text-green-600 dark:text-green-400 ml-1">✓ configured</span>}
           </p>
@@ -542,9 +518,15 @@ export function IntegrationDemo() {
             />
             <button
               onClick={saveWebhookSecret}
-              disabled={!webhookSecret.trim()}
-              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              disabled={!webhookSecret.trim() || isSavingSecret}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
+              {isSavingSecret && (
+                <svg className="h-3 w-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              )}
               Set
             </button>
           </div>
@@ -553,58 +535,19 @@ export function IntegrationDemo() {
           </p>
         </div>
 
-        <div className="mt-4 rounded-md border border-border overflow-hidden">
-          {/* Method + URL bar */}
-          <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-3 py-2">
-            <span className="rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 px-2 py-0.5 text-xs font-bold">
-              GET
-            </span>
-            <span className="font-mono text-sm text-foreground">/api/webhooks/log</span>
-            <span className="ml-auto text-[10px] text-muted-foreground">(local endpoint — shows received webhook events)</span>
-          </div>
-
-          {/* Incoming webhook info */}
-          <div className="border-b border-border px-3 py-2">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
-              NomaSign sends webhooks to
-            </p>
-            <div className="flex items-center gap-2 font-mono text-xs">
-              <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">POST</span>
-              <span className="text-foreground">/api/webhooks/nomasign</span>
-            </div>
-            <div className="mt-1 flex items-center gap-2 font-mono text-xs">
-              <span className="text-muted-foreground">X-NomaSign-Signature:</span>
-              <span className="text-foreground">HMAC-SHA256 (verified with your webhook secret)</span>
-            </div>
-          </div>
-
-          {/* Send button */}
-          <div className="flex items-center gap-3 border-t border-border bg-muted/30 px-3 py-2">
-            <button
-              onClick={loadWebhooks}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              Refresh
-            </button>
-          </div>
-        </div>
-
-        {/* Response */}
-        {webhooksResponse && (
-          <div className="mt-4 rounded-md border border-border overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-3 py-2">
-              <span className={`rounded px-2 py-0.5 text-xs font-bold ${webhooksResponse.status === 200 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"}`}>
-                {webhooksResponse.status === 0 ? "Network Error" : `${webhooksResponse.status}`}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                Response — {Array.isArray(webhooksResponse.raw) ? `${(webhooksResponse.raw as unknown[]).length} events` : ""}
-              </span>
-            </div>
-            <pre className="overflow-x-auto p-3 text-xs font-mono text-foreground bg-background max-h-64 overflow-y-auto">
-              {JSON.stringify(webhooksResponse.raw, null, 2)}
-            </pre>
-          </div>
-        )}
+        <RequestBuilder
+          method="GET"
+          url="/api/webhooks/log"
+          description="(local endpoint — shows received webhook events)"
+          headers={[
+            { key: "X-NomaSign-Signature", value: "HMAC-SHA256 (verified with your webhook secret)" },
+          ]}
+          headerNote="NomaSign sends POST /api/webhooks/nomasign with the signature header above"
+          onSend={loadWebhooks}
+          sendLabel="Refresh"
+          loading={isLoadingWebhooks}
+          response={webhooksResponse}
+        />
       </section>
     </div>
   );

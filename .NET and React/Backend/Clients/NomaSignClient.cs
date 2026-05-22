@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Backend.Models;
+using Backend.Services;
 
 namespace Backend.Clients;
 
@@ -25,17 +26,21 @@ public interface INomaSignClient
 public class NomaSignClient : INomaSignClient
 {
     private readonly HttpClient _http;
+    private readonly RuntimeSettings _settings;
     private readonly string _clientId;
 
-    public NomaSignClient(HttpClient httpClient, IConfiguration config)
+    public NomaSignClient(HttpClient httpClient, IConfiguration config, RuntimeSettings settings)
     {
         _http = httpClient;
+        _settings = settings;
         _clientId = config["NomaSign:ClientId"]!;
     }
 
+    private string Url(string path) => $"{_settings.BaseUrl}{path}";
+
     public async Task<TokenResponse> ExchangeTokenAsync(string refreshToken)
     {
-        var response = await _http.PostAsync("/connect/token",
+        var response = await _http.PostAsync(Url("/connect/token"),
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["grant_type"] = "refresh_token",
@@ -55,7 +60,7 @@ public class NomaSignClient : INomaSignClient
 
     public async Task<JsonElement> GetTemplatesAsync(string accessToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/templates");
+        using var request = new HttpRequestMessage(HttpMethod.Get, Url("/api/templates"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
         var response = await _http.SendAsync(request);
@@ -71,7 +76,7 @@ public class NomaSignClient : INomaSignClient
     public async Task<JsonElement> SendTemplateAsync(string accessToken, string templateId, IntegrationSendPayload payload)
     {
         var json = JsonSerializer.Serialize(payload);
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/templates/{templateId}/send")
+        using var request = new HttpRequestMessage(HttpMethod.Post, Url($"/api/templates/{templateId}/send"))
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
