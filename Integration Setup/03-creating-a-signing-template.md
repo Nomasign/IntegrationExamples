@@ -24,4 +24,4 @@ This ID is what your integration passes to `POST /api/templates/{id}/send` to in
 
 ---
 
-**Next:** [Creating a Refresh Token & Webhook Secret →](./04-creating-a-refresh-token-and-webhook-secret.md)
+**Previous:** [← Creating an Integration Account](./02-creating-an-integration-account.md) | **Next:** [Creating a Refresh Token & Webhook Secret →](./04-creating-a-refresh-token-and-webhook-secret.md)

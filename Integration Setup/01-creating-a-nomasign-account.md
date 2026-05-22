@@ -12,4 +12,4 @@ Once your account is active, you can invite an integrator and start building.
 
 ---
 
-**Next:** [Creating an Integration Account →](./02-creating-an-integration-account.md)
+**Previous:** [← Introduction](./README.md) | **Next:** [Creating an Integration Account →](./02-creating-an-integration-account.md)

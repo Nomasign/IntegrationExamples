@@ -36,4 +36,4 @@ Accept the invitation email, then log in with the integrator account. You'll see
 
 ---
 
-**Next:** [Creating a Signing Template →](./03-creating-a-signing-template.md)
+**Previous:** [← Creating a NomaSign Account](./01-creating-a-nomasign-account.md) | **Next:** [Creating a Signing Template →](./03-creating-a-signing-template.md)

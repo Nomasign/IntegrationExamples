@@ -42,4 +42,8 @@ Click **Generate Tokens**. You'll receive:
 
 ---
 
+---
+
+**Previous:** [← Creating a Signing Template](./03-creating-a-signing-template.md)
+
 **Done!** You now have everything you need. Head back to the [main README](../README.md) to run the example app.
