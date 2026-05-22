@@ -25,19 +25,18 @@ You'll need:
 
 ### 1. Configure the backend
 
-Edit `.NET and React/Backend/appsettings.json` with your credentials:
+Edit `.NET and React/Backend/appsettings.json`:
 
 ```json
 {
   "NomaSign": {
     "BaseUrl": "https://integration-api.nomasign.com",
-    "ClientId": "nomasign-integration",
-    "WebhookSecret": "paste-your-webhook-secret-here"
+    "ClientId": "nomasign-integration"
   }
 }
 ```
 
-> **Refresh Token:** You'll paste your refresh token directly into the example app UI — it's stored locally in your browser for this session only.
+> **Refresh Token** and **Webhook Secret** are configured at runtime via the example app UI — no need to put secrets in config files.
 
 ### 2. Run the backend
 

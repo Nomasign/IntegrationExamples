@@ -1,6 +1,8 @@
 # Creating a Signing Template
 
-Templates define the document layout, recipient placeholders, and signature fields that your integration will use each time it sends a document.
+Templates are reusable document structures. Think of an employment contract — you always want to swap out the name, the date, and who's signing, but the whole structure stays the same. That's a template.
+
+Your integration will instantiate a template each time it sends a document, filling in the variable parts (recipient details, field values) via the API.
 
 ## Steps
 

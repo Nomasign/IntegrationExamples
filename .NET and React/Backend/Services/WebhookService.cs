@@ -19,26 +19,30 @@ public interface IWebhookService
     /// <summary>Get recent webhook events.</summary>
     IEnumerable<WebhookEventDto> GetRecentEvents(int count = 50);
 
-    /// <summary>Set the HMAC secret at runtime.</summary>
+    /// <summary>
+    /// Set the HMAC secret at runtime (used by the interactive demo UI).
+    /// In production, we recommend storing this in Azure Key Vault (or a similar
+    /// secrets manager). You can also set it in appsettings.json, but a vault is preferred.
+    /// </summary>
     void SetSecret(string secret);
 
-    /// <summary>Check if a secret is configured.</summary>
+    /// <summary>
+    /// Check if a secret is configured. This is only needed for the interactive demo —
+    /// in production your secret should always be available from your vault at startup.
+    /// </summary>
     bool IsSecretConfigured { get; }
 }
 
 public class WebhookService : IWebhookService
 {
-    private readonly IConfiguration _config;
     private readonly ILogger<WebhookService> _logger;
     private readonly List<WebhookPayload> _eventLog = [];
     private string? _runtimeSecret;
 
-    public bool IsSecretConfigured => _runtimeSecret != null
-        || _config["NomaSign:WebhookSecret"] is not null and not "YOUR_WEBHOOK_SECRET_HERE";
+    public bool IsSecretConfigured => _runtimeSecret != null;
 
-    public WebhookService(IConfiguration config, ILogger<WebhookService> logger)
+    public WebhookService(ILogger<WebhookService> logger)
     {
-        _config = config;
         _logger = logger;
     }
 
@@ -46,9 +50,13 @@ public class WebhookService : IWebhookService
 
     public WebhookPayload? VerifyAndParse(string rawBody, string? signatureHeader)
     {
-        var secret = _runtimeSecret ?? _config["NomaSign:WebhookSecret"]!;
+        if (_runtimeSecret is null)
+        {
+            _logger.LogWarning("Webhook secret not configured — set it via the UI");
+            return null;
+        }
 
-        if (!VerifySignature(rawBody, signatureHeader, secret))
+        if (!VerifySignature(rawBody, signatureHeader, _runtimeSecret))
         {
             _logger.LogWarning("Webhook signature verification failed");
             return null;

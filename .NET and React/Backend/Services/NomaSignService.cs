@@ -10,6 +10,11 @@ namespace Backend.Services;
 /// </summary>
 public interface INomaSignService
 {
+    /// <summary>
+    /// Exchange a Refresh Token for a short-lived Access Token (used by the interactive demo UI).
+    /// In production, we recommend storing the Refresh Token in Azure Key Vault (or a similar
+    /// secrets manager). You can also set it in appsettings.json, but a vault is preferred.
+    /// </summary>
     Task<AuthenticateResponse> AuthenticateAsync(string refreshToken);
     Task<JsonElement> GetTemplatesAsync();
     Task<JsonElement> SendTemplateAsync(string templateId, SendTemplateRequest request);

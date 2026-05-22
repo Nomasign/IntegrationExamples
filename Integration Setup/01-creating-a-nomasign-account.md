@@ -1,6 +1,6 @@
 # Creating a NomaSign Account
 
-Before you can integrate, you need an active NomaSign account with a subscription plan that supports integrations.
+This is just a regular NomaSign account — nothing special. If you already have one, this step is done and you can skip to the next guide.
 
 ## Steps
 

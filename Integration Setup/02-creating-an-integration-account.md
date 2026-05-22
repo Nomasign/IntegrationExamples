@@ -2,6 +2,8 @@
 
 You'll invite a dedicated email address as an **Integrator** in your organization. This is the sender identity that recipients will see when they receive documents from your integration.
 
+This will be an account like `sign@yourdomain.com` or `signme@yourdomain.com` — this is what signers will see as the sender after you've sent a document via the API.
+
 ## Steps
 
 ### 1. Click on the Profile button
