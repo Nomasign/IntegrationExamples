@@ -20,3 +20,4 @@ obj/
 # OS
 .DS_Store
 Thumbs.db
+.NET and React/frontend/tsconfig.tsbuildinfo

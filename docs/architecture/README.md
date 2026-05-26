@@ -50,7 +50,7 @@ The short-lived access token is held in `NomaSignService` private fields (not in
 
 ## What's demonstrated
 
-1. **[Authenticate](../process/step-1-authenticate.md)** — store refresh token, exchange for access token
-2. **[List Templates](../process/step-2-list-templates.md)** — call the Integration API with the cached access token
-3. **[Send for Signature](../process/step-3-send-for-signature.md)** — map demo DTO to the Integration API payload
-4. **[Webhook Notifications](../process/step-4-webhook-notifications.md)** — HMAC-verify and parse inbound deliveries
+1. **[Authenticate](../authentication/index.md)** — store refresh token, exchange for access token
+2. **[List Templates](../templates/index.md)** — call the Integration API with the cached access token
+3. **[Send for Signature](../templates/index.md#sending-a-template)** — map demo DTO to the Integration API payload
+4. **[Webhook Notifications](../webhooks/index.md)** — HMAC-verify and parse inbound deliveries

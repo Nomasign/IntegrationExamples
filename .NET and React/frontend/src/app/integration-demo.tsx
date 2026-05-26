@@ -5,22 +5,50 @@ import { z } from "zod";
 import { RequestBuilder, ApiResponse } from "./components/request-builder";
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:5203";
-const PROCESS_DOC_BASE = "https://github.com/Nomasign/IntegrationExamples/blob/main/docs/process";
+const DOCS_BASE = "https://github.com/Nomasign/IntegrationExamples/blob/main/docs";
 
-function ProcessDocLink({ step, slug }: { step: number; slug: string }) {
+function ProcessDocLink({ domain, label }: { domain: string; label?: string }) {
   return (
     <a
-      href={`${PROCESS_DOC_BASE}/step-${step}-${slug}.md`}
+      href={`${DOCS_BASE}/${domain}/index.md`}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+      className="inline-flex min-h-9 items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm font-semibold text-primary shadow-sm transition-colors hover:border-primary hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
-      What happens behind the scenes →
+      {label ?? "Docs"}
+      <span aria-hidden="true" className="text-base leading-none">→</span>
     </a>
   );
 }
 
 type Template = { id: string; title: string };
+
+async function readResponseBody(res: Response): Promise<object> {
+  const text = await res.text();
+  if (!text) return {};
+
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed !== null && typeof parsed === "object" ? parsed : { body: parsed };
+  } catch {
+    return { body: text };
+  }
+}
+
+function getTemplatesFromResponse(data: object): Template[] {
+  if (!("items" in data) || !Array.isArray(data.items)) return [];
+
+  return data.items.flatMap((item): Template[] => {
+    if (!item || typeof item !== "object") return [];
+    const template = item as Record<string, unknown>;
+    if (typeof template.id !== "string") return [];
+
+    return [{
+      id: template.id,
+      title: typeof template.title === "string" ? template.title : template.id,
+    }];
+  });
+}
 
 const sendFormSchema = z.object({
   templateId: z.string().min(1, "Template ID is required — select one from Step 2 or paste an ID"),
@@ -49,11 +77,8 @@ export function IntegrationDemo() {
   const [isSending, setIsSending] = useState(false);
   const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(false);
   const [isSavingSecret, setIsSavingSecret] = useState(false);
-  const [isSavingBaseUrl, setIsSavingBaseUrl] = useState(false);
 
   // Other state
-  const [baseUrl, setBaseUrl] = useState("");
-  const [baseUrlSaved, setBaseUrlSaved] = useState(false);
   const [webhookSecret, setWebhookSecret] = useState("");
   const [webhookSecretConfigured, setWebhookSecretConfigured] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -97,17 +122,6 @@ export function IntegrationDemo() {
       .catch(() => {});
   }, []);
 
-  // Load current base URL from backend on mount.
-  useEffect(() => {
-    fetch(`${API}/api/signing/config/base-url`)
-      .then((r) => r.json())
-      .then((d) => {
-        setBaseUrl(d.baseUrl ?? "");
-        setBaseUrlSaved(true);
-      })
-      .catch(() => {});
-  }, []);
-
   async function saveRefreshToken() {
     if (!refreshToken.trim()) return;
     setIsSavingRefreshToken(true);
@@ -146,34 +160,12 @@ export function IntegrationDemo() {
     }
   }
 
-  async function saveBaseUrl() {
-    if (!baseUrl.trim()) return;
-    setIsSavingBaseUrl(true);
-    setBaseUrlSaved(false);
-    try {
-      const res = await fetch(`${API}/api/signing/config/base-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ baseUrl: baseUrl.trim() }),
-      });
-      if (res.ok) {
-        setBaseUrlSaved(true);
-        setStatus(`Integration API URL set to ${baseUrl.trim()}`);
-      }
-    } finally {
-      setIsSavingBaseUrl(false);
-    }
-  }
-
   async function authenticate() {
     setIsAuthenticating(true);
     setAuthResponse(null);
     try {
       const res = await fetch(`${API}/api/signing/auth/token`, { method: "POST" });
-      const data = await res.json().catch(async () => {
-        const text = await res.text().catch(() => "");
-        return { status: res.status, statusText: res.statusText, body: text };
-      });
+      const data = await readResponseBody(res);
       setAuthResponse({ status: res.status, raw: data });
       if (!res.ok) {
         setIsAuthenticated(false);
@@ -181,7 +173,8 @@ export function IntegrationDemo() {
         return;
       }
       setIsAuthenticated(true);
-      setStatus(data.fromCache ? "Access token reused (cached server-side)" : "Access token acquired (cached server-side)");
+      const fromCache = "fromCache" in data && data.fromCache === true;
+      setStatus(fromCache ? "Access token reused (cached server-side)" : "Access token acquired (cached server-side)");
     } catch (err) {
       setAuthResponse({ status: 0, raw: { error: err instanceof Error ? err.message : String(err) } });
       setStatus(`Cannot reach backend at ${API}`);
@@ -195,14 +188,17 @@ export function IntegrationDemo() {
     setTemplatesResponse(null);
     try {
       const res = await fetch(`${API}/api/signing/templates`);
-      const data = await res.json().catch(() => ({}));
+      const data = await readResponseBody(res);
       setTemplatesResponse({ status: res.status, raw: data });
       if (!res.ok) {
+        setIsAuthenticated(false);
         setStatus(`Failed to load templates (${res.status})`);
         return;
       }
-      setTemplates(data.items ?? []);
-      setStatus(`Loaded ${(data.items ?? []).length} templates`);
+      setIsAuthenticated(true);
+      const loadedTemplates = getTemplatesFromResponse(data);
+      setTemplates(loadedTemplates);
+      setStatus(`Loaded ${loadedTemplates.length} templates`);
     } catch (err) {
       setTemplatesResponse({ status: 0, raw: { error: err instanceof Error ? err.message : String(err) } });
       setStatus(`Cannot reach backend at ${API}`);
@@ -242,7 +238,7 @@ export function IntegrationDemo() {
           }),
         }
       );
-      const data = await res.json().catch(async () => ({ text: await res.text().catch(() => "") }));
+      const data = await readResponseBody(res);
       setSendResponse({ status: res.status, raw: data });
       if (!res.ok) {
         setStatus(`Send failed (${res.status})`);
@@ -262,7 +258,7 @@ export function IntegrationDemo() {
     setWebhooksResponse(null);
     try {
       const res = await fetch(`${API}/api/signing/webhooks/log`);
-      const data = await res.json().catch(() => ({}));
+      const data = await readResponseBody(res);
       setWebhooksResponse({ status: res.status, raw: data });
     } catch (err) {
       setWebhooksResponse({ status: 0, raw: { error: err instanceof Error ? err.message : String(err) } });
@@ -281,40 +277,6 @@ export function IntegrationDemo() {
         </div>
       )}
 
-      {/* Integration API base URL config */}
-      <section className="rounded-lg border border-border bg-card p-4">
-        <div className="flex items-center gap-3">
-          <label className="shrink-0 text-sm font-medium text-card-foreground">
-            Integration API URL
-          </label>
-          <input
-            placeholder="https://integration-api.nomasign.com"
-            value={baseUrl}
-            onChange={(e) => { setBaseUrl(e.target.value); setBaseUrlSaved(false); }}
-            className="flex-1 rounded border border-input bg-background px-3 py-1.5 font-mono text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          <button
-            onClick={saveBaseUrl}
-            disabled={!baseUrl.trim() || isSavingBaseUrl}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isSavingBaseUrl && (
-              <svg className="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-            )}
-            Set
-          </button>
-          {baseUrlSaved && (
-            <span className="text-sm font-medium text-green-600 dark:text-green-400">✓</span>
-          )}
-        </div>
-        <p className="mt-1.5 text-[11px] text-muted-foreground">
-          All API calls from this demo go through this URL. Default: <code className="font-mono">https://integration-api.nomasign.com</code>
-        </p>
-      </section>
-
       {/* Status bar */}
       {status && (
         <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
@@ -328,16 +290,19 @@ export function IntegrationDemo() {
           1. Authenticate
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          The long-lived <strong>refresh token</strong> is stored in the backend&apos;s secret store (Key Vault in production, in-memory in this demo). Each call to <code className="font-mono text-xs">POST /api/signing/auth/token</code> exchanges that stored refresh token for a short-lived <strong>access token</strong>, cached server-side and reused as the Bearer token in Steps 2 & 3. Neither token is ever returned to the browser.
+          Store your long-lived refresh token, then exchange it for a short-lived access token. The access token is cached server-side and used as the Bearer token in Steps 2 &amp; 3. Neither token is ever returned to the browser.
         </p>
-        <div className="mt-1 mb-4"><ProcessDocLink step={1} slug="authenticate" /></div>
+        <div className="mt-2 mb-4"><ProcessDocLink domain="authentication" /></div>
 
-        {/* Refresh-token config (paste once, stored in ISecretStore) */}
-        <div className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-3">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
-            Refresh Token {refreshTokenConfigured && <span className="text-green-600 dark:text-green-400 ml-1">✓ configured</span>}
+        {/* Sub-step 1.1: Refresh Token */}
+        <div className="mt-5 rounded-md border border-border bg-muted/30 px-4 py-4">
+          <h3 className="text-sm font-semibold text-card-foreground">
+            1.1 Refresh Token {refreshTokenConfigured && <span className="text-green-600 dark:text-green-400 ml-1 text-xs font-medium">✓ configured</span>}
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Paste the long-lived refresh token generated from the NomaSign Integration page. It&apos;s stored in the backend&apos;s secret store (Key Vault in production, in-memory in this demo).
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 mt-3">
             <input
               type="password"
               placeholder={refreshTokenConfigured ? "Paste a new one to replace the saved token" : "Paste your refresh token"}
@@ -353,26 +318,38 @@ export function IntegrationDemo() {
               Save
             </button>
           </div>
-          <p className="mt-1 text-[10px] text-muted-foreground">
+          <p className="mt-1.5 text-[10px] text-muted-foreground">
             POST <code className="font-mono">/api/signing/config/refresh-token</code> — writes to the backend&apos;s <code className="font-mono">ISecretStore</code>.
           </p>
         </div>
 
-        <RequestBuilder
-          method="POST"
-          url="/api/signing/auth/token"
-          info="No body — backend reads the saved refresh token from its secret store"
-          onSend={authenticate}
-          disabled={!refreshTokenConfigured}
-          disabledMessage="Save a refresh token first"
-          loading={isAuthenticating}
-          extraActions={isAuthenticated ? (
-            <span className="text-sm font-medium text-green-600 dark:text-green-400">
-              ✓ Authenticated
-            </span>
-          ) : undefined}
-          response={authResponse}
-        />
+        {/* Sub-step 1.2: Authenticate */}
+        <div className="mt-4 rounded-md border border-border bg-muted/30 px-4 py-4">
+          <h3 className="text-sm font-semibold text-card-foreground">
+            1.2 Authenticate
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Exchange the stored refresh token for a short-lived access token via <code className="font-mono">POST /connect/token</code>. The backend caches the result and refreshes automatically when it expires.
+          </p>
+          <div className="mt-3">
+            <RequestBuilder
+              method="POST"
+              url="/api/signing/auth/token"
+              info="No body — backend reads the saved refresh token from its secret store"
+              onSend={authenticate}
+              sendLabel="Authenticate"
+              disabled={!refreshTokenConfigured}
+              disabledMessage="Save a refresh token first (step 1.1)"
+              loading={isAuthenticating}
+              extraActions={isAuthenticated ? (
+                <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                  ✓ Authenticated
+                </span>
+              ) : undefined}
+              response={authResponse}
+            />
+          </div>
+        </div>
       </section>
 
       {/* Step 2: List Templates */}
@@ -383,15 +360,16 @@ export function IntegrationDemo() {
         <p className="mt-1 text-sm text-muted-foreground">
           Fetch available signing templates from the Integration API. The backend attaches the cached access token automatically and refreshes silently if it&apos;s expired.
         </p>
-        <div className="mt-1 mb-4"><ProcessDocLink step={2} slug="list-templates" /></div>
+        <div className="mt-1 mb-4"><ProcessDocLink domain="templates" /></div>
 
         <RequestBuilder
           method="GET"
           url="/api/signing/templates"
           info="Backend adds Authorization header internally (token managed server-side)"
           onSend={loadTemplates}
-          disabled={!isAuthenticated}
-          disabledMessage="Authenticate first"
+          sendLabel="List templates"
+          disabled={!refreshTokenConfigured}
+          disabledMessage="Save a refresh token first"
           loading={isLoadingTemplates}
           response={templatesResponse}
         />
@@ -439,7 +417,7 @@ export function IntegrationDemo() {
         <p className="mt-1 text-sm text-muted-foreground">
           Instantiate a template and send it to a recipient. The backend maps this simple <code className="font-mono text-xs">{`{ label, name, email }`}</code> DTO into the Integration API&apos;s nested <code className="font-mono text-xs">signingRequests</code> payload.
         </p>
-        <div className="mt-1 mb-4"><ProcessDocLink step={3} slug="send-for-signature" /></div>
+        <div className="mt-1 mb-4"><ProcessDocLink domain="templates" /></div>
 
         <RequestBuilder
           method="POST"
@@ -537,7 +515,7 @@ export function IntegrationDemo() {
           When signing completes, NomaSign POSTs HMAC-signed events to your webhook endpoint.
           This step requires your backend to be publicly reachable (deployed or via a tunnel — we recommend VS Code Dev Tunnels).
         </p>
-        <div className="mt-1 mb-4"><ProcessDocLink step={4} slug="webhook-notifications" /></div>
+        <div className="mt-1 mb-4"><ProcessDocLink domain="webhooks" /></div>
 
         {/* HMAC Secret config */}
         <div className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-3">

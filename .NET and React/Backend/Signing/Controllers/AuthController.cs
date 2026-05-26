@@ -1,3 +1,4 @@
+using Backend.Signing.Clients;
 using Backend.Signing.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -25,7 +26,18 @@ public class AuthController : ControllerBase
         if (!await _nomaSignService.HasRefreshTokenAsync())
             return BadRequest("No refresh token configured. POST it to /api/config/refresh-token first.");
 
-        var result = await _nomaSignService.AuthenticateAsync(forceRefresh);
-        return Ok(result);
+        try
+        {
+            var result = await _nomaSignService.AuthenticateAsync(forceRefresh);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (NomaSignApiException ex)
+        {
+            return StatusCode(ex.StatusCode, new { error = ex.Message });
+        }
     }
 }

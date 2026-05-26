@@ -1,8 +1,4 @@
-# Step 3 — Troubleshooting
-
-Common problems when creating templates or using them via the API.
-
----
+# Templates — Troubleshooting
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
@@ -12,8 +8,4 @@ Common problems when creating templates or using them via the API.
 | Template not visible after creation | Browser cache or wrong account session | Hard-refresh, verify you're logged in as the integrator (check profile menu) |
 | "Template not found" error on send | Wrong template ID or template was deleted | Verify the ID via `GET /api/templates` — copy from the response |
 | Signer sees blank where a value should be | Field was optional and not pre-filled, or label typo | Double-check your payload's field labels against the template |
-| Template shows in UI but not in API | Logged into UI as integrator but API token is from a different integration entry | Ensure the refresh token you're using belongs to the same integrator account |
-
----
-
-[← Back to Step 3](./index.md) | [FAQ](./faq.md)
+| Template shows in UI but not in API | API token is from a different integration entry | Ensure the refresh token you're using belongs to the same integrator account that created the template |

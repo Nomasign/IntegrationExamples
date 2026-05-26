@@ -31,6 +31,7 @@ public class ConfigController : ControllerBase
             return BadRequest("BaseUrl is required.");
 
         _runtimeSettings.BaseUrl = request.BaseUrl.Trim();
+        _nomaSignService.ClearAccessToken();
         return Ok(new { baseUrl = _runtimeSettings.BaseUrl });
     }
 
