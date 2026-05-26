@@ -18,7 +18,7 @@ No. NomaSign operates in production only. There's no separate sandbox URL or tes
 
 ### Can multiple people in my org use the Integration feature?
 
-The Integration feature is an accout (tied to your plan), but API access is granted per-user via the **Integrator** role. You can have multiple integrator accounts, each with their own credentials and templates.
+The Integration feature is account-level/organization-level and tied to your plan, but API access is granted per user via the **Integrator** role. You can have multiple integrator accounts, each with their own credentials and templates.
 
 ### Do I need a credit card to start?
 

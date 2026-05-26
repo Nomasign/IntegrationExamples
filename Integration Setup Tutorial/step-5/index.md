@@ -77,7 +77,7 @@ Every webhook delivery is a JSON POST with the following structure. Here's a com
 | `type` | string | Event type (see Events table above) |
 | `apiVersion` | string | API version that generated this event |
 | `createdAt` | ISO 8601 | When the event was created |
-| `environment` | string | `production`, `staging`, or `dev` |
+| `environment` | string | Currently always `production` for public integrations |
 | `session.id` | UUID | Signing session ID |
 | `session.templateId` | string | Template that was instantiated |
 | `session.status` | string | `completed`, `declined`, or `cancelled` |
@@ -143,53 +143,75 @@ The signed string is: `<unix_timestamp>.<raw_request_body>`
 const crypto = require("crypto");
 
 function verifySignature(rawBody, signatureHeader, secret) {
-  const parts = signatureHeader.split(",");
+  if (!signatureHeader || !secret) return false;
+
+  const parts = signatureHeader.split(",").map(p => p.trim());
   const timestamp = parts.find(p => p.startsWith("t="))?.slice(2);
   const signature = parts.find(p => p.startsWith("v1="))?.slice(3);
 
   if (!timestamp || !signature) return false;
+  if (!/^\d+$/.test(timestamp)) return false;
+  if (!/^[a-f0-9]{64}$/i.test(signature)) return false;
 
   // Reject events older than 5 minutes (replay protection)
-  const age = Math.abs(Date.now() / 1000 - parseInt(timestamp));
+  const age = Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp));
   if (age > 300) return false;
 
   const expected = crypto
     .createHmac("sha256", secret)
-    .update(`${timestamp}.${rawBody}`)
+    .update(`${timestamp}.${rawBody}`, "utf8")
     .digest("hex");
 
-  return crypto.timingSafeEqual(
-    Buffer.from(signature, "hex"),
-    Buffer.from(expected, "hex")
-  );
+  const receivedBuffer = Buffer.from(signature, "hex");
+  const expectedBuffer = Buffer.from(expected, "hex");
+
+  // timingSafeEqual throws if lengths differ, so check length first.
+  if (receivedBuffer.length !== expectedBuffer.length) return false;
+
+  return crypto.timingSafeEqual(receivedBuffer, expectedBuffer);
 }
 ```
 
 ### C# Example
 
 ```csharp
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
-bool VerifySignature(string rawBody, string signatureHeader, string secret)
+bool VerifySignature(string rawBody, string? signatureHeader, string secret)
 {
-    var parts = signatureHeader.Split(',');
-    var timestamp = parts.FirstOrDefault(p => p.StartsWith("t="))?[2..];
-    var signature = parts.FirstOrDefault(p => p.StartsWith("v1="))?[3..];
+    if (string.IsNullOrWhiteSpace(signatureHeader) || string.IsNullOrEmpty(secret))
+        return false;
 
-    if (timestamp == null || signature == null) return false;
+    var parts = signatureHeader.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+    var timestamp = parts.FirstOrDefault(p => p.StartsWith("t=", StringComparison.Ordinal))?[2..];
+    var signature = parts.FirstOrDefault(p => p.StartsWith("v1=", StringComparison.Ordinal))?[3..];
+
+    if (string.IsNullOrWhiteSpace(timestamp) || string.IsNullOrWhiteSpace(signature))
+        return false;
+
+    if (!long.TryParse(timestamp, NumberStyles.None, CultureInfo.InvariantCulture, out var timestampSeconds))
+        return false;
+
+    if (signature.Length != 64 || !signature.All(Uri.IsHexDigit))
+        return false;
 
     // Replay protection: reject events older than 5 minutes
-    var age = Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - long.Parse(timestamp));
+    var age = Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - timestampSeconds);
     if (age > 300) return false;
 
     var signedPayload = $"{timestamp}.{rawBody}";
     using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
-    var expected = Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(signedPayload))).ToLower();
+    var expectedHex = Convert.ToHexString(
+        hmac.ComputeHash(Encoding.UTF8.GetBytes(signedPayload))
+    ).ToLowerInvariant();
 
-    return CryptographicOperations.FixedTimeEquals(
-        Encoding.UTF8.GetBytes(signature),
-        Encoding.UTF8.GetBytes(expected));
+    var receivedBytes = Convert.FromHexString(signature);
+    var expectedBytes = Convert.FromHexString(expectedHex);
+
+    return receivedBytes.Length == expectedBytes.Length &&
+           CryptographicOperations.FixedTimeEquals(receivedBytes, expectedBytes);
 }
 ```
 

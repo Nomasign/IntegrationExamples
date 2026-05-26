@@ -6,7 +6,7 @@ A full-stack example showing how to integrate with the NomaSign signing platform
 
 Before running the example app, you need a NomaSign integration account with a **Refresh Token** and **Webhook Secret**.
 
-👉 **[Follow the Integration Setup Tutorial](./Integration%20Setup%20Tutorial%20(front%20to%20back)/README.md)** for step-by-step instructions with screenshots.
+👉 **[Follow the Integration Setup Tutorial](./Integration%20Setup%20Tutorial/README.md)** for step-by-step instructions with screenshots.
 
 You'll need:
 
