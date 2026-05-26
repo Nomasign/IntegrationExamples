@@ -1,8 +1,10 @@
 # Creating an Integration Account
 
-You'll invite a dedicated email address as an **Integrator** in your organization. This is the sender identity that recipients will see when they receive documents from your integration.
+You'll invite a dedicated email address as an **Integrator** in your organization. This account gets integration/API access automatically when assigned the Integrator role — no separate plan or subscription is needed for this account.
 
 This will be an account like `sign@yourdomain.com` or `signme@yourdomain.com` — this is what signers will see as the sender after you've sent a document via the API.
+
+> **Important:** The Integrator role is what grants API access. If you invite someone with a regular role (Member, Admin), they won't have integration access. Make sure you select **Integrator** in the invite dialog.
 
 ## Steps
 

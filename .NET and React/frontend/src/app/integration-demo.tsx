@@ -1,16 +1,41 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { z } from "zod";
 import { RequestBuilder, ApiResponse } from "./components/request-builder";
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:5203";
-const STORAGE_KEY = "nomasign_refresh_token";
+const PROCESS_DOC_BASE = "https://github.com/Nomasign/IntegrationExamples/blob/main/docs/process";
+
+function ProcessDocLink({ step, slug }: { step: number; slug: string }) {
+  return (
+    <a
+      href={`${PROCESS_DOC_BASE}/step-${step}-${slug}.md`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+    >
+      What happens behind the scenes →
+    </a>
+  );
+}
 
 type Template = { id: string; title: string };
 
+const sendFormSchema = z.object({
+  templateId: z.string().min(1, "Template ID is required — select one from Step 2 or paste an ID"),
+  label: z.string().min(1, "Recipient label is required"),
+  name: z.string().min(1, "Recipient name is required — this is shown on the signing document"),
+  email: z.string().min(1, "Recipient email is required").email("Must be a valid email address"),
+});
+
+type SendFormErrors = Partial<Record<keyof z.infer<typeof sendFormSchema>, string>>;
+
 export function IntegrationDemo() {
   const [refreshToken, setRefreshToken] = useState("");
-  const [token, setToken] = useState<string | null>(null);
+  const [refreshTokenConfigured, setRefreshTokenConfigured] = useState(false);
+  const [isSavingRefreshToken, setIsSavingRefreshToken] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // Responses
   const [authResponse, setAuthResponse] = useState<ApiResponse>(null);
@@ -40,6 +65,7 @@ export function IntegrationDemo() {
     name: "",
     email: "",
   });
+  const [sendFormErrors, setSendFormErrors] = useState<SendFormErrors>({});
 
   // Check backend health on mount and every 10 seconds.
   useEffect(() => {
@@ -59,9 +85,13 @@ export function IntegrationDemo() {
     return () => clearInterval(interval);
   }, []);
 
-  // Check if webhook secret is already configured on mount.
+  // Check if refresh token and webhook secret are already configured on mount.
   useEffect(() => {
-    fetch(`${API}/api/config/webhook-secret`)
+    fetch(`${API}/api/signing/config/refresh-token`)
+      .then((r) => r.json())
+      .then((d) => setRefreshTokenConfigured(d.configured))
+      .catch(() => {});
+    fetch(`${API}/api/signing/config/webhook-secret`)
       .then((r) => r.json())
       .then((d) => setWebhookSecretConfigured(d.configured))
       .catch(() => {});
@@ -69,7 +99,7 @@ export function IntegrationDemo() {
 
   // Load current base URL from backend on mount.
   useEffect(() => {
-    fetch(`${API}/api/config/base-url`)
+    fetch(`${API}/api/signing/config/base-url`)
       .then((r) => r.json())
       .then((d) => {
         setBaseUrl(d.baseUrl ?? "");
@@ -78,26 +108,31 @@ export function IntegrationDemo() {
       .catch(() => {});
   }, []);
 
-  // Load saved refresh token from localStorage on mount.
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) setRefreshToken(saved);
-  }, []);
-
-  function handleRefreshTokenChange(value: string) {
-    setRefreshToken(value);
-  }
-
-  function clearRefreshToken() {
-    localStorage.removeItem(STORAGE_KEY);
-    setRefreshToken("");
+  async function saveRefreshToken() {
+    if (!refreshToken.trim()) return;
+    setIsSavingRefreshToken(true);
+    try {
+      const res = await fetch(`${API}/api/signing/config/refresh-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: refreshToken.trim() }),
+      });
+      if (res.ok) {
+        setRefreshTokenConfigured(true);
+        setRefreshToken("");
+        setIsAuthenticated(false);
+        setStatus("Refresh token saved server-side");
+      }
+    } finally {
+      setIsSavingRefreshToken(false);
+    }
   }
 
   async function saveWebhookSecret() {
     if (!webhookSecret.trim()) return;
     setIsSavingSecret(true);
     try {
-      const res = await fetch(`${API}/api/config/webhook-secret`, {
+      const res = await fetch(`${API}/api/signing/config/webhook-secret`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ secret: webhookSecret }),
@@ -116,7 +151,7 @@ export function IntegrationDemo() {
     setIsSavingBaseUrl(true);
     setBaseUrlSaved(false);
     try {
-      const res = await fetch(`${API}/api/config/base-url`, {
+      const res = await fetch(`${API}/api/signing/config/base-url`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ baseUrl: baseUrl.trim() }),
@@ -131,29 +166,22 @@ export function IntegrationDemo() {
   }
 
   async function authenticate() {
-    if (!refreshToken.trim()) {
-      setStatus("Please paste your refresh token first");
-      return;
-    }
     setIsAuthenticating(true);
     setAuthResponse(null);
     try {
-      const res = await fetch(`${API}/api/auth/token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken: refreshToken.trim() }),
-      });
+      const res = await fetch(`${API}/api/signing/auth/token`, { method: "POST" });
       const data = await res.json().catch(async () => {
         const text = await res.text().catch(() => "");
         return { status: res.status, statusText: res.statusText, body: text };
       });
       setAuthResponse({ status: res.status, raw: data });
       if (!res.ok) {
+        setIsAuthenticated(false);
         setStatus(`Auth failed (${res.status})`);
         return;
       }
-      setToken(data.accessToken);
-      setStatus(data.fromCache ? "Token loaded (cached)" : "Token acquired");
+      setIsAuthenticated(true);
+      setStatus(data.fromCache ? "Access token reused (cached server-side)" : "Access token acquired (cached server-side)");
     } catch (err) {
       setAuthResponse({ status: 0, raw: { error: err instanceof Error ? err.message : String(err) } });
       setStatus(`Cannot reach backend at ${API}`);
@@ -166,7 +194,7 @@ export function IntegrationDemo() {
     setIsLoadingTemplates(true);
     setTemplatesResponse(null);
     try {
-      const res = await fetch(`${API}/api/templates`);
+      const res = await fetch(`${API}/api/signing/templates`);
       const data = await res.json().catch(() => ({}));
       setTemplatesResponse({ status: res.status, raw: data });
       if (!res.ok) {
@@ -184,15 +212,26 @@ export function IntegrationDemo() {
   }
 
   async function sendTemplate() {
-    if (!sendForm.templateId || !sendForm.email) {
-      setStatus("Template ID and email are required");
+    // Validate all fields with Zod
+    const result = sendFormSchema.safeParse(sendForm);
+    if (!result.success) {
+      const fieldErrors: SendFormErrors = {};
+      for (const issue of result.error.issues) {
+        const field = issue.path[0] as keyof SendFormErrors;
+        if (!fieldErrors[field]) {
+          fieldErrors[field] = issue.message;
+        }
+      }
+      setSendFormErrors(fieldErrors);
+      setStatus("Please fix the highlighted fields before sending");
       return;
     }
+    setSendFormErrors({});
     setIsSending(true);
     setSendResponse(null);
     try {
       const res = await fetch(
-        `${API}/api/templates/${sendForm.templateId}/send`,
+        `${API}/api/signing/templates/${sendForm.templateId}/send`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -222,7 +261,7 @@ export function IntegrationDemo() {
     setIsLoadingWebhooks(true);
     setWebhooksResponse(null);
     try {
-      const res = await fetch(`${API}/api/webhooks/log`);
+      const res = await fetch(`${API}/api/signing/webhooks/log`);
       const data = await res.json().catch(() => ({}));
       setWebhooksResponse({ status: res.status, raw: data });
     } catch (err) {
@@ -249,7 +288,7 @@ export function IntegrationDemo() {
             Integration API URL
           </label>
           <input
-            placeholder="https://dev.integration.nomasign.com"
+            placeholder="https://integration-api.nomasign.com"
             value={baseUrl}
             onChange={(e) => { setBaseUrl(e.target.value); setBaseUrlSaved(false); }}
             className="flex-1 rounded border border-input bg-background px-3 py-1.5 font-mono text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
@@ -272,7 +311,7 @@ export function IntegrationDemo() {
           )}
         </div>
         <p className="mt-1.5 text-[11px] text-muted-foreground">
-          All API calls from this demo go through this URL. Default: <code className="font-mono">https://dev.integration.nomasign.com</code>
+          All API calls from this demo go through this URL. Default: <code className="font-mono">https://integration-api.nomasign.com</code>
         </p>
       </section>
 
@@ -288,63 +327,51 @@ export function IntegrationDemo() {
         <h2 className="text-lg font-semibold text-card-foreground">
           1. Authenticate
         </h2>
-        <p className="mt-1 mb-4 text-sm text-muted-foreground">
-          Exchange your refresh token for an access token. This is what gets sent to the NomaSign API.
+        <p className="mt-1 text-sm text-muted-foreground">
+          The long-lived <strong>refresh token</strong> is stored in the backend&apos;s secret store (Key Vault in production, in-memory in this demo). Each call to <code className="font-mono text-xs">POST /api/signing/auth/token</code> exchanges that stored refresh token for a short-lived <strong>access token</strong>, cached server-side and reused as the Bearer token in Steps 2 & 3. Neither token is ever returned to the browser.
         </p>
+        <div className="mt-1 mb-4"><ProcessDocLink step={1} slug="authenticate" /></div>
+
+        {/* Refresh-token config (paste once, stored in ISecretStore) */}
+        <div className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-3">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
+            Refresh Token {refreshTokenConfigured && <span className="text-green-600 dark:text-green-400 ml-1">✓ configured</span>}
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              placeholder={refreshTokenConfigured ? "Paste a new one to replace the saved token" : "Paste your refresh token"}
+              value={refreshToken}
+              onChange={(e) => setRefreshToken(e.target.value)}
+              className="flex-1 rounded border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <button
+              onClick={saveRefreshToken}
+              disabled={!refreshToken.trim() || isSavingRefreshToken}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Save
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            POST <code className="font-mono">/api/signing/config/refresh-token</code> — writes to the backend&apos;s <code className="font-mono">ISecretStore</code>.
+          </p>
+        </div>
 
         <RequestBuilder
           method="POST"
-          url="/api/auth/token"
-          headers={[{ key: "Content-Type", value: "application/json" }]}
-          body={
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
-                  refreshToken
-                </label>
-                <input
-                  type="password"
-                  placeholder="Paste your refresh token here"
-                  value={refreshToken}
-                  onChange={(e) => handleRefreshTokenChange(e.target.value)}
-                  className="flex-1 rounded border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </div>
-            </div>
-          }
+          url="/api/signing/auth/token"
+          info="No body — backend reads the saved refresh token from its secret store"
           onSend={authenticate}
-          disabled={!refreshToken.trim()}
+          disabled={!refreshTokenConfigured}
+          disabledMessage="Save a refresh token first"
           loading={isAuthenticating}
-          extraActions={
-            <>
-              {refreshToken && (
-                <button
-                  onClick={clearRefreshToken}
-                  className="rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-muted transition-colors"
-                >
-                  Clear
-                </button>
-              )}
-              {token && (
-                <span className="text-sm font-medium text-green-600 dark:text-green-400">
-                  ✓ Authenticated
-                </span>
-              )}
-            </>
-          }
+          extraActions={isAuthenticated ? (
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">
+              ✓ Authenticated
+            </span>
+          ) : undefined}
           response={authResponse}
-          responseExtra={
-            authResponse?.status === 200 && (authResponse.raw as Record<string, unknown>).accessToken ? (
-              <div className="border-t border-border bg-muted/30 px-3 py-2">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
-                  Saved Access Token (used as Bearer token for subsequent requests)
-                </p>
-                <p className="font-mono text-xs text-foreground break-all">
-                  {((authResponse.raw as Record<string, unknown>).accessToken as string).slice(0, 30)}...{((authResponse.raw as Record<string, unknown>).accessToken as string).slice(-20)}
-                </p>
-              </div>
-            ) : undefined
-          }
         />
       </section>
 
@@ -353,16 +380,17 @@ export function IntegrationDemo() {
         <h2 className="text-lg font-semibold text-card-foreground">
           2. List Templates
         </h2>
-        <p className="mt-1 mb-4 text-sm text-muted-foreground">
-          Fetch available signing templates from the Integration API.
+        <p className="mt-1 text-sm text-muted-foreground">
+          Fetch available signing templates from the Integration API. The backend attaches the cached access token automatically and refreshes silently if it&apos;s expired.
         </p>
+        <div className="mt-1 mb-4"><ProcessDocLink step={2} slug="list-templates" /></div>
 
         <RequestBuilder
           method="GET"
-          url="/api/templates"
+          url="/api/signing/templates"
           info="Backend adds Authorization header internally (token managed server-side)"
           onSend={loadTemplates}
-          disabled={!token}
+          disabled={!isAuthenticated}
           disabledMessage="Authenticate first"
           loading={isLoadingTemplates}
           response={templatesResponse}
@@ -408,65 +436,87 @@ export function IntegrationDemo() {
         <h2 className="text-lg font-semibold text-card-foreground">
           3. Send for Signature
         </h2>
-        <p className="mt-1 mb-4 text-sm text-muted-foreground">
-          Instantiate a template and send it to a recipient.
+        <p className="mt-1 text-sm text-muted-foreground">
+          Instantiate a template and send it to a recipient. The backend maps this simple <code className="font-mono text-xs">{`{ label, name, email }`}</code> DTO into the Integration API&apos;s nested <code className="font-mono text-xs">signingRequests</code> payload.
         </p>
+        <div className="mt-1 mb-4"><ProcessDocLink step={3} slug="send-for-signature" /></div>
 
         <RequestBuilder
           method="POST"
-          url={`/api/templates/${sendForm.templateId || ":id"}/send`}
+          url={`/api/signing/templates/${sendForm.templateId || ":id"}/send`}
           headers={[{ key: "Content-Type", value: "application/json" }]}
           headerNote="Backend adds Authorization header internally"
           body={
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
-                  templateId
-                </label>
-                <input
-                  placeholder="Select from Step 2 or paste ID"
-                  value={sendForm.templateId}
-                  onChange={(e) => setSendForm((f) => ({ ...f, templateId: e.target.value }))}
-                  className="flex-1 rounded border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
-                />
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
+                    templateId
+                  </label>
+                  <input
+                    placeholder="Select from Step 2 or paste ID"
+                    value={sendForm.templateId}
+                    onChange={(e) => { setSendForm((f) => ({ ...f, templateId: e.target.value })); setSendFormErrors((prev) => ({ ...prev, templateId: undefined })); }}
+                    className={`flex-1 rounded border px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 ${sendFormErrors.templateId ? 'border-red-500 bg-red-50 dark:bg-red-950/20 focus:border-red-500 focus:ring-red-500' : 'border-input bg-background focus:border-primary focus:ring-ring'}`}
+                  />
+                </div>
+                {sendFormErrors.templateId && (
+                  <p className="ml-[7.5rem] text-[11px] font-medium text-red-600 dark:text-red-400">{sendFormErrors.templateId}</p>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
-                  label
-                </label>
-                <input
-                  placeholder="Recipient 1"
-                  value={sendForm.label}
-                  onChange={(e) => setSendForm((f) => ({ ...f, label: e.target.value }))}
-                  className="flex-1 rounded border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
-                />
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
+                    label
+                  </label>
+                  <input
+                    placeholder="Recipient 1"
+                    value={sendForm.label}
+                    onChange={(e) => { setSendForm((f) => ({ ...f, label: e.target.value })); setSendFormErrors((prev) => ({ ...prev, label: undefined })); }}
+                    className={`flex-1 rounded border px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 ${sendFormErrors.label ? 'border-red-500 bg-red-50 dark:bg-red-950/20 focus:border-red-500 focus:ring-red-500' : 'border-input bg-background focus:border-primary focus:ring-ring'}`}
+                  />
+                </div>
+                {sendFormErrors.label && (
+                  <p className="ml-[7.5rem] text-[11px] font-medium text-red-600 dark:text-red-400">{sendFormErrors.label}</p>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
-                  name
-                </label>
-                <input
-                  placeholder="John Doe"
-                  value={sendForm.name}
-                  onChange={(e) => setSendForm((f) => ({ ...f, name: e.target.value }))}
-                  className="flex-1 rounded border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
-                />
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
+                    name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    placeholder="John Doe"
+                    value={sendForm.name}
+                    onChange={(e) => { setSendForm((f) => ({ ...f, name: e.target.value })); setSendFormErrors((prev) => ({ ...prev, name: undefined })); }}
+                    className={`flex-1 rounded border px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 ${sendFormErrors.name ? 'border-red-500 bg-red-50 dark:bg-red-950/20 focus:border-red-500 focus:ring-red-500' : 'border-input bg-background focus:border-primary focus:ring-ring'}`}
+                  />
+                </div>
+                {sendFormErrors.name && (
+                  <p className="ml-[7.5rem] text-[11px] font-medium text-red-600 dark:text-red-400">{sendFormErrors.name}</p>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
-                  email
-                </label>
-                <input
-                  placeholder="john@example.com"
-                  value={sendForm.email}
-                  onChange={(e) => setSendForm((f) => ({ ...f, email: e.target.value }))}
-                  className="flex-1 rounded border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
-                />
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
+                    email <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="john@example.com"
+                    value={sendForm.email}
+                    onChange={(e) => { setSendForm((f) => ({ ...f, email: e.target.value })); setSendFormErrors((prev) => ({ ...prev, email: undefined })); }}
+                    className={`flex-1 rounded border px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 ${sendFormErrors.email ? 'border-red-500 bg-red-50 dark:bg-red-950/20 focus:border-red-500 focus:ring-red-500' : 'border-input bg-background focus:border-primary focus:ring-ring'}`}
+                  />
+                </div>
+                {sendFormErrors.email && (
+                  <p className="ml-[7.5rem] text-[11px] font-medium text-red-600 dark:text-red-400">{sendFormErrors.email}</p>
+                )}
               </div>
             </div>
           }
           onSend={sendTemplate}
-          disabled={!token}
+          disabled={!isAuthenticated}
           disabledMessage="Authenticate first"
           loading={isSending}
           response={sendResponse}
@@ -483,25 +533,11 @@ export function IntegrationDemo() {
             Optional
           </span>
         </div>
-        <p className="mt-1 mb-4 text-sm text-muted-foreground">
+        <p className="mt-1 text-sm text-muted-foreground">
           When signing completes, NomaSign POSTs HMAC-signed events to your webhook endpoint.
-          This step requires your backend to be publicly reachable (deployed or via a tunnel like ngrok).
+          This step requires your backend to be publicly reachable (deployed or via a tunnel — we recommend VS Code Dev Tunnels).
         </p>
-
-        <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-4 py-3">
-          <p className="text-sm font-medium text-foreground">📖 Webhook setup guide</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Learn how to receive and verify webhook events, configure HMAC secrets, and handle retries.
-          </p>
-          <a
-            href="https://github.com/Nomasign/IntegrationExamples/blob/main/Integration%20Setup/05-receiving-webhook-notifications.md"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
-          >
-            Read the webhook guide →
-          </a>
-        </div>
+        <div className="mt-1 mb-4"><ProcessDocLink step={4} slug="webhook-notifications" /></div>
 
         {/* HMAC Secret config */}
         <div className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-3">
@@ -537,12 +573,12 @@ export function IntegrationDemo() {
 
         <RequestBuilder
           method="GET"
-          url="/api/webhooks/log"
+          url="/api/signing/webhooks/log"
           description="(local endpoint — shows received webhook events)"
           headers={[
             { key: "X-NomaSign-Signature", value: "HMAC-SHA256 (verified with your webhook secret)" },
           ]}
-          headerNote="NomaSign sends POST /api/webhooks/nomasign with the signature header above"
+          headerNote="NomaSign sends POST /api/signing/webhooks/nomasign with the signature header above"
           onSend={loadWebhooks}
           sendLabel="Refresh"
           loading={isLoadingWebhooks}

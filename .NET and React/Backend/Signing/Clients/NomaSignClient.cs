@@ -1,10 +1,10 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Backend.Models;
-using Backend.Services;
+using Backend.Signing.Models;
+using Backend.Signing.Services;
 
-namespace Backend.Clients;
+namespace Backend.Signing.Clients;
 
 /// <summary>
 /// HTTP client for the NomaSign Integration API.
@@ -25,22 +25,25 @@ public interface INomaSignClient
 
 public class NomaSignClient : INomaSignClient
 {
-    private readonly HttpClient _http;
+    public const string HttpClientName = "nomasign";
+
+    private readonly IHttpClientFactory _httpFactory;
     private readonly RuntimeSettings _settings;
     private readonly string _clientId;
 
-    public NomaSignClient(HttpClient httpClient, IConfiguration config, RuntimeSettings settings)
+    public NomaSignClient(IHttpClientFactory httpFactory, IConfiguration config, RuntimeSettings settings)
     {
-        _http = httpClient;
+        _httpFactory = httpFactory;
         _settings = settings;
         _clientId = config["NomaSign:ClientId"]!;
     }
 
+    private HttpClient Http() => _httpFactory.CreateClient(HttpClientName);
     private string Url(string path) => $"{_settings.BaseUrl}{path}";
 
     public async Task<TokenResponse> ExchangeTokenAsync(string refreshToken)
     {
-        var response = await _http.PostAsync(Url("/connect/token"),
+        var response = await Http().PostAsync(Url("/connect/token"),
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["grant_type"] = "refresh_token",
@@ -63,7 +66,7 @@ public class NomaSignClient : INomaSignClient
         using var request = new HttpRequestMessage(HttpMethod.Get, Url("/api/templates"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        var response = await _http.SendAsync(request);
+        var response = await Http().SendAsync(request);
         if (!response.IsSuccessStatusCode)
         {
             var error = await response.Content.ReadAsStringAsync();
@@ -82,7 +85,7 @@ public class NomaSignClient : INomaSignClient
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        var response = await _http.SendAsync(request);
+        var response = await Http().SendAsync(request);
         if (!response.IsSuccessStatusCode)
         {
             var error = await response.Content.ReadAsStringAsync();

@@ -1,11 +1,11 @@
-using Backend.Models;
-using Backend.Services;
+using Backend.Signing.Models;
+using Backend.Signing.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Backend.Controllers;
+namespace Backend.Signing.Controllers;
 
 [ApiController]
-[Route("api/webhooks")]
+[Route("api/signing/webhooks")]
 public class WebhooksController : ControllerBase
 {
     private readonly IWebhookService _webhookService;
@@ -29,7 +29,7 @@ public class WebhooksController : ControllerBase
 
         var signatureHeader = Request.Headers["X-NomaSign-Signature"].FirstOrDefault();
 
-        var payload = _webhookService.VerifyAndParse(rawBody, signatureHeader);
+        var payload = await _webhookService.VerifyAndParseAsync(rawBody, signatureHeader);
         if (payload == null)
             return Unauthorized();
 

@@ -1,12 +1,12 @@
-using Backend.Clients;
-using Backend.Models;
-using Backend.Services;
+using Backend.Signing.Clients;
+using Backend.Signing.Models;
+using Backend.Signing.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Backend.Controllers;
+namespace Backend.Signing.Controllers;
 
 [ApiController]
-[Route("api/templates")]
+[Route("api/signing/templates")]
 public class TemplatesController : ControllerBase
 {
     private readonly INomaSignService _nomaSignService;

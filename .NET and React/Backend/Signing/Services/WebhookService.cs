@@ -1,9 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Backend.Models;
+using Backend.Infra;
+using Backend.Signing.Models;
 
-namespace Backend.Services;
+namespace Backend.Signing.Services;
 
 /// <summary>
 /// Handles webhook signature verification, payload parsing, and event routing.
@@ -11,7 +12,7 @@ namespace Backend.Services;
 public interface IWebhookService
 {
     /// <summary>Verify the HMAC-SHA256 signature and parse the webhook payload.</summary>
-    WebhookPayload? VerifyAndParse(string rawBody, string? signatureHeader);
+    Task<WebhookPayload?> VerifyAndParseAsync(string rawBody, string? signatureHeader);
 
     /// <summary>Process a verified webhook event (route to handlers).</summary>
     void HandleEvent(WebhookPayload payload);
@@ -20,43 +21,48 @@ public interface IWebhookService
     IEnumerable<WebhookEventDto> GetRecentEvents(int count = 50);
 
     /// <summary>
-    /// Set the HMAC secret at runtime (used by the interactive demo UI).
-    /// In production, we recommend storing this in Azure Key Vault (or a similar
-    /// secrets manager). You can also set it in appsettings.json, but a vault is preferred.
+    /// Set the HMAC secret at runtime. The demo UI calls this so users can paste their
+    /// webhook secret without restarting. In production, secrets should be provisioned
+    /// to your <see cref="ISecretStore"/> at deployment time (e.g. Key Vault).
     /// </summary>
-    void SetSecret(string secret);
+    Task SetSecretAsync(string secret);
 
     /// <summary>
-    /// Check if a secret is configured. This is only needed for the interactive demo —
-    /// in production your secret should always be available from your vault at startup.
+    /// True if a webhook secret is currently available from the secret store.
+    /// Used by the demo UI to show a "configured" indicator.
     /// </summary>
-    bool IsSecretConfigured { get; }
+    Task<bool> IsSecretConfiguredAsync();
 }
 
 public class WebhookService : IWebhookService
 {
     private readonly ILogger<WebhookService> _logger;
+    private readonly ISecretStore _secretStore;
     private readonly List<WebhookPayload> _eventLog = [];
-    private string? _runtimeSecret;
 
-    public bool IsSecretConfigured => _runtimeSecret != null;
+    private const string WebhookSecretKey = "nomasign-webhook-secret";
 
-    public WebhookService(ILogger<WebhookService> logger)
+    public WebhookService(ILogger<WebhookService> logger, ISecretStore secretStore)
     {
         _logger = logger;
+        _secretStore = secretStore;
     }
 
-    public void SetSecret(string secret) => _runtimeSecret = secret;
+    public Task SetSecretAsync(string secret) => _secretStore.SetSecretAsync(WebhookSecretKey, secret);
 
-    public WebhookPayload? VerifyAndParse(string rawBody, string? signatureHeader)
+    public async Task<bool> IsSecretConfiguredAsync() =>
+        await _secretStore.GetSecretAsync(WebhookSecretKey) is not null;
+
+    public async Task<WebhookPayload?> VerifyAndParseAsync(string rawBody, string? signatureHeader)
     {
-        if (_runtimeSecret is null)
+        var secret = await _secretStore.GetSecretAsync(WebhookSecretKey);
+        if (secret is null)
         {
-            _logger.LogWarning("Webhook secret not configured — set it via the UI");
+            _logger.LogWarning("Webhook secret not configured — set it via the UI or provision it in your ISecretStore");
             return null;
         }
 
-        if (!VerifySignature(rawBody, signatureHeader, _runtimeSecret))
+        if (!VerifySignature(rawBody, signatureHeader, secret))
         {
             _logger.LogWarning("Webhook signature verification failed");
             return null;
@@ -129,6 +135,11 @@ public class WebhookService : IWebhookService
 
         if (!parts.TryGetValue("t", out var timestamp) || !parts.TryGetValue("v1", out var v1))
             return false;
+
+        // Replay protection: reject deliveries whose timestamp is more than 5 minutes old.
+        // Without this, a captured (body, signature) pair stays valid forever.
+        if (!long.TryParse(timestamp, out var unixTs)) return false;
+        if (Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - unixTs) > 300) return false;
 
         // Signed payload is "{timestamp}.{body}"
         var signedPayload = $"{timestamp}.{body}";

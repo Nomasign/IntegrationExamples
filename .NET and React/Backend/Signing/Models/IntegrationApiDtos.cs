@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Backend.Models;
+namespace Backend.Signing.Models;
 
 // ─── Integration API models ───────────────────────────────────────────────────
 // These match the JSON shapes the NomaSign Integration API sends/receives.

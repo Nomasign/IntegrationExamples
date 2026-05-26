@@ -1,28 +1,27 @@
-using Backend.Models;
-using Backend.Services;
+using Backend.Signing.Models;
+using Backend.Signing.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Backend.Controllers;
+namespace Backend.Signing.Controllers;
 
 [ApiController]
-[Route("api/config")]
+[Route("api/signing/config")]
 public class ConfigController : ControllerBase
 {
+    private readonly INomaSignService _nomaSignService;
     private readonly IWebhookService _webhookService;
     private readonly RuntimeSettings _runtimeSettings;
 
-    public ConfigController(IWebhookService webhookService, RuntimeSettings runtimeSettings)
+    public ConfigController(INomaSignService nomaSignService, IWebhookService webhookService, RuntimeSettings runtimeSettings)
     {
+        _nomaSignService = nomaSignService;
         _webhookService = webhookService;
         _runtimeSettings = runtimeSettings;
     }
 
     /// <summary>Get the current Integration API base URL.</summary>
     [HttpGet("base-url")]
-    public IActionResult GetBaseUrl()
-    {
-        return Ok(new { baseUrl = _runtimeSettings.BaseUrl });
-    }
+    public IActionResult GetBaseUrl() => Ok(new { baseUrl = _runtimeSettings.BaseUrl });
 
     /// <summary>Change the Integration API base URL at runtime.</summary>
     [HttpPost("base-url")]
@@ -36,31 +35,47 @@ public class ConfigController : ControllerBase
     }
 
     /// <summary>
-    /// Set the HMAC webhook secret at runtime (from the frontend UI).
-    /// In production, store this in a vault — not in memory.
+    /// Save the long-lived refresh token to the secret store.
+    /// In production, provision this at deployment time — not via an HTTP endpoint.
+    /// </summary>
+    [HttpPost("refresh-token")]
+    public async Task<IActionResult> SetRefreshToken([FromBody] SetRefreshTokenRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            return BadRequest("RefreshToken is required.");
+
+        await _nomaSignService.SetRefreshTokenAsync(request.RefreshToken.Trim());
+        _nomaSignService.ClearAccessToken();
+        return Ok(new { configured = true });
+    }
+
+    /// <summary>Check if a refresh token is configured.</summary>
+    [HttpGet("refresh-token")]
+    public async Task<IActionResult> GetRefreshTokenStatus()
+    {
+        var configured = await _nomaSignService.HasRefreshTokenAsync();
+        return Ok(new { configured });
+    }
+
+    /// <summary>
+    /// Save the HMAC webhook secret to the secret store.
+    /// Same caveat as refresh token: provision out-of-band in production.
     /// </summary>
     [HttpPost("webhook-secret")]
-    public IActionResult SetWebhookSecret([FromBody] SetWebhookSecretRequest request)
+    public async Task<IActionResult> SetWebhookSecret([FromBody] SetWebhookSecretRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Secret))
             return BadRequest("Secret is required.");
 
-        _webhookService.SetSecret(request.Secret.Trim());
+        await _webhookService.SetSecretAsync(request.Secret.Trim());
         return Ok(new WebhookSecretStatusResponse(Configured: true));
     }
 
     /// <summary>Check if the webhook secret is configured.</summary>
     [HttpGet("webhook-secret")]
-    public IActionResult GetWebhookSecretStatus()
+    public async Task<IActionResult> GetWebhookSecretStatus()
     {
-        return Ok(new WebhookSecretStatusResponse(_webhookService.IsSecretConfigured));
-    }
-
-    /// <summary>Clear the cached access token, forcing re-exchange on next request.</summary>
-    [HttpPost("clear-cache")]
-    public IActionResult ClearTokenCache([FromServices] TokenCache cache)
-    {
-        cache.Clear();
-        return Ok(new { cleared = true });
+        var configured = await _webhookService.IsSecretConfiguredAsync();
+        return Ok(new WebhookSecretStatusResponse(configured));
     }
 }

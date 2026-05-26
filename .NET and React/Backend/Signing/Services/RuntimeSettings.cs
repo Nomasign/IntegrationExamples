@@ -1,4 +1,4 @@
-namespace Backend.Services;
+namespace Backend.Signing.Services;
 
 /// <summary>
 /// Holds runtime-configurable settings that can be changed via the UI.

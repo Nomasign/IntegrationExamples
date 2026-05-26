@@ -1,9 +1,9 @@
-namespace Backend.Models;
+namespace Backend.Signing.Models;
 
 // ─── Frontend response DTOs ───────────────────────────────────────────────────
 // Clean, simple objects returned to the React UI.
 
-public record AuthenticateResponse(string AccessToken, bool FromCache);
+public record AuthenticateResponse(bool Authenticated, bool FromCache, DateTime ExpiresAt);
 
 public record TemplateDto(string Id, string Title);
 

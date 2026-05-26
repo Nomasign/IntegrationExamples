@@ -8,7 +8,7 @@ When a signing session changes state (completed, declined, cancelled, or a parti
 
 ## Prerequisites
 
-- A publicly reachable HTTPS endpoint (deployed server, Azure Function, or a tunnel like [ngrok](https://ngrok.com) for local development)
+- A publicly reachable HTTPS endpoint (deployed server, Azure Function, or a tunnel for local development)
 - Your **Webhook Secret** (generated in [Step 4](./04-creating-a-refresh-token-and-webhook-secret.md))
 
 ## Events
@@ -22,59 +22,15 @@ When a signing session changes state (completed, declined, cancelled, or a parti
 
 ## Payload Shape
 
-```json
-{
-  "id": "evt_01J...",
-  "type": "signing_session.completed",
-  "apiVersion": "2026-05-01",
-  "createdAt": "2026-05-22T12:34:56Z",
-  "environment": "production",
-  "session": {
-    "id": "...",
-    "organizationId": "...",
-    "templateId": "...",
-    "completedAt": "...",
-    "participants": [
-      {
-        "id": "...",
-        "name": "Jane Doe",
-        "email": "jane@example.com",
-        "role": "otp",
-        "signedAt": "2026-05-22T12:34:56Z"
-      }
-    ],
-    "documents": [
-      {
-        "id": "...",
-        "name": "Agreement.pdf",
-        "signingLayer": {
-          "fields": [
-            {
-              "id": "...",
-              "name": "Full Name",
-              "type": "Text",
-              "participantId": "...",
-              "value": "Jane Doe"
-            }
-          ]
-        }
-      }
-    ]
-  }
-}
-```
+The canonical shape is the `WebhookPayload` record (plus `WebhookSession`, `WebhookRecipient`, `WebhookDocument`, `WebhookField`) in [`Backend/Signing/Models/IntegrationApiDtos.cs`](../.NET%20and%20React/Backend/Signing/Models/IntegrationApiDtos.cs). JSON property names are camelCase.
 
-## Security Headers
+## Security Header
 
-Every delivery includes these headers:
+Every delivery includes this header:
 
 | Header | Purpose |
 |---|---|
 | `X-NomaSign-Signature` | `t=<unix_ts>,v1=<hex_hmac>` — HMAC-SHA256 signature |
-| `X-NomaSign-Event-Id` | Unique event ID (use as idempotency key) |
-| `X-NomaSign-Event-Type` | e.g. `signing_session.completed` |
-| `X-NomaSign-Delivery-Id` | Unique delivery attempt ID |
-| `X-NomaSign-Environment` | `production`, `staging`, or `dev` |
 
 ## Verifying the Signature
 
@@ -143,7 +99,7 @@ bool VerifySignature(string rawBody, string signatureHeader, string secret)
 - **Timeout:** 10 seconds per attempt. Respond with a 2xx within that window.
 - **Retry schedule:** immediate → +1 min → +5 min → +30 min → +24 h → +25 h (max 6 attempts).
 - **Auto-disable:** After 20 consecutive failures, the endpoint is disabled and an alert email is sent.
-- **Idempotency:** Use `X-NomaSign-Event-Id` to deduplicate — retries send the same event ID.
+- **Idempotency:** Use the payload's `id` field to deduplicate — retries send the same event ID.
 
 ## Best Practices
 
@@ -156,17 +112,59 @@ bool VerifySignature(string rawBody, string signatureHeader, string secret)
 
 ## Local Development
 
-To receive webhooks locally, expose your backend via a tunnel:
+To receive webhooks on your local machine, you need a public URL that tunnels traffic to your localhost backend. We recommend **VS Code Dev Tunnels** — they're free, built into VS Code, require no third-party signup, and provide HTTPS by default.
+
+### Option A: VS Code UI (Easiest)
+
+1. Open the **Ports** panel in VS Code (Terminal → Ports tab, or `Ctrl+Shift+P` → "Ports: Focus on Ports View")
+2. Click **Forward a Port** and enter `5203` (the example backend port)
+3. Set visibility to **Public** (right-click the row → Port Visibility → Public)
+4. Copy the generated URL (e.g. `https://abc123-5203.euw.devtunnels.ms`)
+5. In the NomaSign web app, set your webhook URL to:  
+   `https://abc123-5203.euw.devtunnels.ms/api/signing/webhooks/nomasign`
+
+> **Tip:** The tunnel stays active as long as VS Code is open. Restart it from the Ports panel if disconnected.
+
+### Option B: CLI
+
+If you prefer the command line:
 
 ```bash
-# Using ngrok (free tier available)
-ngrok http 5203
+# Install the Dev Tunnels CLI (one-time)
+# Windows: winget install Microsoft.devtunnel
+# macOS:   brew install --cask devtunnel
+# Linux:   curl -sL https://aka.ms/DevTunnelCliInstall | bash
 
-# Then configure your webhook URL in the NomaSign web app:
-# https://<your-subdomain>.ngrok.io/api/webhooks/nomasign
+# Login (one-time)
+devtunnel user login
+
+# Create and start a tunnel for your backend port
+devtunnel host -p 5203 --allow-anonymous
 ```
 
-The example app's backend already includes a `POST /api/webhooks/nomasign` endpoint that verifies signatures and logs received events.
+The CLI outputs a URL like `https://abc123-5203.euw.devtunnels.ms`. Set your webhook endpoint to:
+
+```
+https://<your-tunnel-url>/api/signing/webhooks/nomasign
+```
+
+### Verifying It Works
+
+1. Start your backend (`dotnet run` in the Backend folder)
+2. Start the tunnel (VS Code Ports panel or CLI)
+3. In the NomaSign web app → Integration page → set your webhook URL to the tunnel URL + `/api/signing/webhooks/nomasign`
+4. Click **Send Test Event** in the NomaSign UI
+5. Check your backend logs — you should see the event received and verified
+6. In the example app UI at `http://localhost:4999`, click "Refresh" in the Webhook section to see the logged event
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| Webhook returns 401 Unauthorized | Your HMAC secret isn't configured — set it in the demo UI or check that you copied the correct secret |
+| Tunnel URL not reachable | Ensure visibility is set to "Public" (not "Private") in VS Code Ports |
+| Events arrive but signature fails | Make sure your Webhook Secret matches what was generated in Step 4 — regenerate if unsure |
+| Backend not receiving requests | Verify the tunnel port (5203) matches your backend's actual port |
 
 ## Configuring in NomaSign
 

@@ -1,11 +1,10 @@
-using Backend.Models;
-using Backend.Services;
+using Backend.Signing.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Backend.Controllers;
+namespace Backend.Signing.Controllers;
 
 [ApiController]
-[Route("api/auth")]
+[Route("api/signing/auth")]
 public class AuthController : ControllerBase
 {
     private readonly INomaSignService _nomaSignService;
@@ -16,23 +15,17 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Exchange a refresh token for an access token.
-    /// The frontend sends the refresh token (pasted by the user in the UI).
+    /// Trigger a token exchange using the refresh token stored in the secret store
+    /// (set it first via POST /api/config/refresh-token). The access token is cached
+    /// server-side and never returned to the caller.
     /// </summary>
     [HttpPost("token")]
-    public async Task<IActionResult> Authenticate([FromBody] AuthenticateRequest request)
+    public async Task<IActionResult> Authenticate([FromQuery] bool forceRefresh = false)
     {
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
-            return BadRequest("Refresh token is required.");
+        if (!await _nomaSignService.HasRefreshTokenAsync())
+            return BadRequest("No refresh token configured. POST it to /api/config/refresh-token first.");
 
-        try
-        {
-            var result = await _nomaSignService.AuthenticateAsync(request.RefreshToken, request.ForceRefresh);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            return Problem(ex.Message, statusCode: 500);
-        }
+        var result = await _nomaSignService.AuthenticateAsync(forceRefresh);
+        return Ok(result);
     }
 }
