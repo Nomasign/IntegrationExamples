@@ -11,8 +11,8 @@ sequenceDiagram
     participant API as NomaSign /api/templates
 
     UI->>BE: GET /api/signing/templates
-    Note over BE: EnsureAccessTokenAsync()<br/>(refreshes silently if expired)
-    BE->>API: GET /api/templates<br/>Authorization: Bearer <access_token>
+    Note over BE: EnsureAccessTokenAsync() - refreshes silently if expired
+    BE->>API: GET /api/templates (Bearer token)
     API-->>BE: { items: [{id, title}, ...] }
     BE-->>UI: passes JSON through unchanged
 ```

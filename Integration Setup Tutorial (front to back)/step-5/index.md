@@ -9,20 +9,119 @@ When a signing session changes state (completed, declined, cancelled, or a parti
 ## Prerequisites
 
 - A publicly reachable HTTPS endpoint (deployed server, Azure Function, or a tunnel for local development)
-- Your **Webhook Secret** (generated in [Step 4](./04-creating-a-refresh-token-and-webhook-secret.md))
+- Your **Webhook Secret** (generated in [Step 4](../step-4/index.md))
 
 ## Events
 
 | Event Type | Fires When |
 |---|---|
-| `signing_session.completed` | All participants have signed (enabled by default) |
-| `signing_session.declined` | Any participant declined |
-| `signing_session.cancelled` | The sender cancelled the session |
-| `signing_participant.signed` | A single participant signed (fires per signer) |
+| `signing_session.completed` | All participants have signed |
+
+> **Note:** Additional event types (declined, cancelled, per-participant signed) may be added in the future.
 
 ## Payload Shape
 
-The canonical shape is the `WebhookPayload` record (plus `WebhookSession`, `WebhookRecipient`, `WebhookDocument`, `WebhookField`) in [`Backend/Signing/Models/IntegrationApiDtos.cs`](../.NET%20and%20React/Backend/Signing/Models/IntegrationApiDtos.cs). JSON property names are camelCase.
+Every webhook delivery is a JSON POST with the following structure. Here's a complete example for a `signing_session.completed` event:
+
+```json
+{
+  "id": "evt_01J8XYZABC123",
+  "type": "signing_session.completed",
+  "apiVersion": "2026-05-01",
+  "createdAt": "2026-05-26T14:32:00Z",
+  "environment": "production",
+  "session": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "organizationId": "org_abc123",
+    "templateId": "tpl_def456",
+    "status": "completed",
+    "completedAt": "2026-05-26T14:31:58Z",
+    "recipients": [
+      {
+        "label": "Signer 1",
+        "name": "Jane Doe",
+        "email": "jane@example.com",
+        "status": "signed",
+        "signedAt": "2026-05-26T14:31:58Z"
+      }
+    ],
+    "documents": [
+      {
+        "document": "Employment Agreement.pdf",
+        "cloudDocumentId": "doc_789xyz",
+        "fields": [
+          {
+            "label": "customer_name",
+            "type": "Text",
+            "recipient": "Signer 1",
+            "value": "Jane Doe"
+          },
+          {
+            "label": "contract_start_date",
+            "type": "Text",
+            "recipient": "Signer 1",
+            "value": "2026-06-01"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Payload field reference
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique event ID — use as idempotency key |
+| `type` | string | Event type (see Events table above) |
+| `apiVersion` | string | API version that generated this event |
+| `createdAt` | ISO 8601 | When the event was created |
+| `environment` | string | `production`, `staging`, or `dev` |
+| `session.id` | UUID | Signing session ID |
+| `session.templateId` | string | Template that was instantiated |
+| `session.status` | string | `completed`, `declined`, or `cancelled` |
+| `session.recipients[]` | array | Each recipient with their signing status |
+| `session.documents[]` | array | Each document with filled field values |
+
+> **Forward-compatible:** New fields may be added to payloads over time. Your handler should ignore unknown properties — do not fail on unexpected keys.
+
+## Critical: Raw body handling
+
+The HMAC signature is calculated over the **exact raw bytes** of the HTTP request body. This is the single most common source of webhook verification failures.
+
+**You must:**
+- Read the raw request body as bytes/string **before** any JSON parsing or model binding
+- Never re-serialize parsed JSON and verify against that (whitespace and key order will differ)
+- Ensure your framework's body parser hasn't consumed or modified the body before you read it
+
+### ASP.NET Core — reading raw body
+
+```csharp
+[HttpPost("nomasign")]
+public async Task<IActionResult> Receive()
+{
+    // Read raw body BEFORE any model binding
+    using var reader = new StreamReader(Request.Body);
+    var rawBody = await reader.ReadToEndAsync();
+
+    var signatureHeader = Request.Headers["X-NomaSign-Signature"].FirstOrDefault();
+    // ... verify signature using rawBody ...
+}
+```
+
+### Express.js — reading raw body
+
+```javascript
+// Must configure express to preserve raw body
+app.use("/api/webhooks/nomasign", express.raw({ type: "application/json" }));
+
+app.post("/api/webhooks/nomasign", (req, res) => {
+  const rawBody = req.body.toString("utf8");
+  const signatureHeader = req.headers["x-nomasign-signature"];
+  // ... verify signature using rawBody ...
+});
+```
 
 ## Security Header
 
@@ -157,14 +256,7 @@ https://<your-tunnel-url>/api/signing/webhooks/nomasign
 5. Check your backend logs — you should see the event received and verified
 6. In the example app UI at `http://localhost:4999`, click "Refresh" in the Webhook section to see the logged event
 
-### Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| Webhook returns 401 Unauthorized | Your HMAC secret isn't configured — set it in the demo UI or check that you copied the correct secret |
-| Tunnel URL not reachable | Ensure visibility is set to "Public" (not "Private") in VS Code Ports |
-| Events arrive but signature fails | Make sure your Webhook Secret matches what was generated in Step 4 — regenerate if unsure |
-| Backend not receiving requests | Verify the tunnel port (5203) matches your backend's actual port |
+> **Stuck?** See the [FAQ](./faq.md) or [Troubleshooting](./troubleshooting.md) for signature failures, tunnel issues, retries, and more.
 
 ## Configuring in NomaSign
 
@@ -176,6 +268,6 @@ https://<your-tunnel-url>/api/signing/webhooks/nomasign
 
 ---
 
-**Previous:** [← Creating a Refresh Token & Webhook Secret](./04-creating-a-refresh-token-and-webhook-secret.md)
+**Previous:** [← Creating a Refresh Token & Webhook Secret](../step-4/index.md)
 
-**Done!** Your integration can now receive real-time notifications. Head back to the [main README](../README.md) for the full example.
+**Done!** Your integration can now receive real-time notifications. Head back to the [main README](../../README.md) for the full example.

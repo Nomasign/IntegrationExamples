@@ -22,7 +22,7 @@ sequenceDiagram
     SS-->>BE: refresh token
     BE->>API: POST /connect/token (grant_type=refresh_token)
     API-->>BE: { access_token, expires_in }
-    Note over BE: Cache access_token + expiresAt<br/>in private fields (NomaSignService)
+    Note over BE: Cache access_token + expiresAt in private fields (NomaSignService)
     BE-->>UI: 200 { authenticated, fromCache, expiresAt }
 ```
 

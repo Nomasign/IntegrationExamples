@@ -1,4 +1,4 @@
-# Integration Setup
+# Integration Setup Tutorial
 
 Welcome to the NomaSign Integration Setup guide. This section walks you through everything you need before you can start sending documents for signature via the API.
 
@@ -23,10 +23,10 @@ A NomaSign integration lets you send documents for signature, pre-fill recipient
 
 Follow these guides in order:
 
-1. [Creating a NomaSign Account](./01-creating-a-nomasign-account.md)
-2. [Creating an Integration Account](./02-creating-an-integration-account.md)
-3. [Creating a Signing Template](./03-creating-a-signing-template.md)
-4. [Creating a Refresh Token & Webhook Secret](./04-creating-a-refresh-token-and-webhook-secret.md)
-5. [Receiving Webhook Notifications](./05-receiving-webhook-notifications.md) *(optional)*
+1. [Creating a NomaSign Account](./step-1/index.md)
+2. [Creating an Integration Account](./step-2/index.md)
+3. [Creating a Signing Template](./step-3/index.md)
+4. [Creating a Refresh Token & Webhook Secret](./step-4/index.md)
+5. [Receiving Webhook Notifications](./step-5/index.md) *(optional)*
 
 Once you've completed steps 1–4, head back to the [main README](../README.md) to run the example app. Step 5 covers webhook notifications — useful when you want real-time event updates, but not required to send documents.

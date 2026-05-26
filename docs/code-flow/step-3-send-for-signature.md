@@ -10,10 +10,10 @@ sequenceDiagram
     participant BE as Backend
     participant API as NomaSign /api/templates/{id}/send
 
-    UI->>BE: POST /api/signing/templates/{id}/send<br/>{ label, name, email }
+    UI->>BE: POST /api/signing/templates/{id}/send
     Note over BE: EnsureAccessTokenAsync()
-    Note over BE: Map demo DTO →<br/>Integration API payload shape
-    BE->>API: POST /api/templates/{id}/send<br/>Authorization: Bearer <access_token><br/>{ signingRequests: [{ recipients: [...] }] }
+    Note over BE: Map demo DTO to Integration API payload shape
+    BE->>API: POST /api/templates/{id}/send (Bearer token)
     API-->>BE: { sessionId, ... }
     BE-->>UI: passes JSON through unchanged
 ```

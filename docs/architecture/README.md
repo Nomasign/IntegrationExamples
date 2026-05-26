@@ -4,15 +4,15 @@ How the example app connects to NomaSign.
 
 ```mermaid
 graph LR
-    UI["Example FE App<br/>(localhost:4999)"] --> Backend["Example BE App<br/>(localhost:5203)"]
-    Backend --> API["NomaSign Integration API<br/>(integration-api.nomasign.com)"]
-    Backend -.->|reads / writes| Secrets["ISecretStore<br/>(InMemory or Key Vault)"]
+    UI["Example FE App\n(localhost:4999)"] --> Backend["Example BE App\n(localhost:5203)"]
+    Backend --> API["NomaSign Integration API\n(integration.nomasign.com)"]
+    Backend -.-> Secrets["ISecretStore\n(InMemory or Key Vault)"]
 
     subgraph NomaSign["NomaSign Platform"]
         API
     end
 
-    NomaSign -->|"POST /api/signing/webhooks/nomasign"| Backend
+    NomaSign -->|webhook POST| Backend
 ```
 
 ## Backend layout

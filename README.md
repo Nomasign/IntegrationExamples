@@ -6,7 +6,7 @@ A full-stack example showing how to integrate with the NomaSign signing platform
 
 Before running the example app, you need a NomaSign integration account with a **Refresh Token** and **Webhook Secret**.
 
-👉 **[Follow the Integration Setup guide](./Integration%20Setup/README.md)** for step-by-step instructions with screenshots.
+👉 **[Follow the Integration Setup Tutorial](./Integration%20Setup%20Tutorial%20(front%20to%20back)/README.md)** for step-by-step instructions with screenshots.
 
 You'll need:
 
@@ -72,7 +72,7 @@ https://<your-tunnel-url>/api/signing/webhooks/nomasign
 ## Architecture & process docs
 
 - [`docs/architecture/`](docs/architecture/README.md) — system diagram and what's demonstrated end-to-end
-- [`docs/process/`](docs/process/) — per-step walkthrough of what happens behind each button in the demo UI
+- [`docs/code-flow/`](docs/code-flow/) — per-step walkthrough of what happens behind each button in the demo UI
 
 ## Key files
 

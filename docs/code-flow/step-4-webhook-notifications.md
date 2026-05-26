@@ -16,10 +16,10 @@ sequenceDiagram
     BE->>SS: SetSecretAsync("nomasign-webhook-secret", value)
 
     Note over NomaSign: Signing event occurs
-    NomaSign->>BE: POST /api/signing/webhooks/nomasign<br/>X-NomaSign-Signature: t=<unix>,v1=<hex><br/>{ id, type, session, ... }
+    NomaSign->>BE: POST /api/signing/webhooks/nomasign
     BE->>SS: GetSecretAsync("nomasign-webhook-secret")
     SS-->>BE: secret
-    Note over BE: 1. Check timestamp is within ±300s<br/>2. Compute HMAC-SHA256(`{t}.{body}`, secret)<br/>3. Constant-time compare against v1
+    Note over BE: Verify HMAC signature and timestamp
     BE->>BE: Deserialize WebhookPayload, route by type, log in-memory
     BE-->>NomaSign: 200 OK
 
