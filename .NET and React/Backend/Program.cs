@@ -3,6 +3,7 @@ using Azure.Security.KeyVault.Secrets;
 using Backend.Infra;
 using Backend.Signing.Clients;
 using Backend.Signing.Services;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,14 +20,29 @@ builder.Services.AddSwaggerGen();
 var initialBaseUrl = builder.Configuration["NomaSign:BaseUrl"]!;
 builder.Services.AddSingleton(new RuntimeSettings(initialBaseUrl));
 
-// Secret store. If KeyVault:Url is configured, use Azure Key Vault (production pattern).
-// Otherwise fall back to InMemorySecretStore (demo only — secrets are lost on restart).
+// Secret store. Selection precedence:
+//   1. KeyVault:Url set       → Azure Key Vault (preferred production pattern).
+//   2. Sql:ConnectionString set → SQL Server with AES-256-GCM at-rest encryption
+//                                  (use when Key Vault isn't available — on-prem,
+//                                   third-party cloud, or fewer-dependencies ops).
+//   3. Otherwise              → InMemorySecretStore (demo only).
 var keyVaultUrl = builder.Configuration["KeyVault:Url"];
+var sqlConnectionString = builder.Configuration["Sql:ConnectionString"];
+
 if (!string.IsNullOrWhiteSpace(keyVaultUrl))
 {
     builder.Services.Configure<KeyVaultOptions>(builder.Configuration.GetSection(KeyVaultOptions.SectionName));
     builder.Services.AddSingleton(new SecretClient(new Uri(keyVaultUrl), new DefaultAzureCredential()));
     builder.Services.AddSingleton<ISecretStore, KeyVaultSecretStore>();
+}
+else if (!string.IsNullOrWhiteSpace(sqlConnectionString))
+{
+    builder.Services.Configure<SqlSecretStoreOptions>(
+        builder.Configuration.GetSection(SqlSecretStoreOptions.SectionName));
+    builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.AddSingleton<ISecretEnvelope, AesGcmSecretEnvelope>();
+    builder.Services.AddDbContextFactory<SecretsDbContext>(opts => opts.UseSqlServer(sqlConnectionString));
+    builder.Services.AddSingleton<ISecretStore, SqlSecretStore>();
 }
 else
 {
@@ -56,6 +72,16 @@ builder.Services.AddCors(options =>
 // ─── Middleware pipeline ──────────────────────────────────────────────────────
 
 var app = builder.Build();
+
+// Auto-apply SQL migrations in dev (when SqlSecretStore is the active impl).
+if (app.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(sqlConnectionString)
+    && string.IsNullOrWhiteSpace(keyVaultUrl))
+{
+    using var scope = app.Services.CreateScope();
+    var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<SecretsDbContext>>();
+    await using var db = await dbFactory.CreateDbContextAsync();
+    await db.Database.MigrateAsync();
+}
 
 if (app.Environment.IsDevelopment())
 {
