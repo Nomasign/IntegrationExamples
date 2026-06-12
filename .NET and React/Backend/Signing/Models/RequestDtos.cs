@@ -4,7 +4,7 @@ namespace Backend.Signing.Models;
 // These are intentionally simple — the frontend sends basic data,
 // the service layer maps it to what the Integration API expects.
 
-/// <summary>POST /api/templates/{id}/send — frontend sends one recipient.</summary>
+/// <summary>POST /api/signing/templates/{id}/send — frontend sends one recipient.</summary>
 public record SendTemplateRequest
 {
     public string Label { get; init; } = "Recipient 1";

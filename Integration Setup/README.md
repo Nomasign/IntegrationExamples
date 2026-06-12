@@ -9,7 +9,7 @@ A NomaSign integration lets you send documents for signature, pre-fill recipient
 ## How It Works
 
 1. **Authenticate** — exchange your Refresh Token for a short-lived Access Token via `POST /connect/token`
-2. **Send a Document** — call `POST /api/templates/{id}/send` with recipient details and field values. NomaSign creates a signing session and emails the document to the signer.
+2. **Send a Document** — call `POST /api/templates/send` with the template ID, recipient details, and field values. NomaSign creates a signing session and emails the document to the signer.
 3. **Receive Webhooks** — NomaSign sends HMAC-signed webhook events to your endpoint when documents are signed, declined, or cancelled.
 
 ## What You Can Build
