@@ -89,6 +89,7 @@ public class NomaSignService : INomaSignService
 
         var payload = new IntegrationSendPayload
         {
+            TemplateId = templateId,
             SigningRequests = [
                 new IntegrationSigningRequest
                 {

@@ -36,13 +36,14 @@ Returns all templates owned by the authenticated integrator account.
 ## Sending a template
 
 ```
-POST /api/templates/{id}/send
+POST /api/templates/send
 Authorization: Bearer <access_token>
 Content-Type: application/json
 ```
 
 ```json
 {
+  "templateId": "your-template-id",
   "signingRequests": [{
     "recipients": [{
       "label": "Signer 1",
@@ -58,7 +59,30 @@ Content-Type: application/json
 }
 ```
 
-- `sendInitialNotification: true` makes NomaSign email the recipient. Set to `false` if you want to deliver the signing link yourself.
+### Required fields
+
+| Field | Description |
+|-------|-------------|
+| `templateId` | The template to instantiate |
+| `signingRequests` | Array of signing request objects (at least one) |
+
+### Optional fields
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `signingType` | Template default | `"parallel"` or `"sequential"` |
+| `authRequirement` | Template default | `"public"` or `"otp"` (OTP requires email verification before signing) |
+| `senderName` | Authenticated user's name | Display name on the invite email |
+| `subject` | `null` | Custom email subject line |
+| `message` | `null` | Custom message body in the invite email |
+| `messageTemplate` | `null` | Message template with placeholders |
+| `cc` | `[]` | Array of email addresses to CC on all notifications |
+| `replyToEmail` | `null` | Reply-to address on invite emails |
+| `sendInitialNotification` | `true` | Whether NomaSign emails the recipient. Set to `false` to deliver the signing link yourself |
+| `remindersEnabled` | `null` | Enable/disable automatic reminder emails |
+| `reminderDaysBeforeExpiry` | `null` | Array of days before expiry to send reminders (e.g. `[7, 3, 1]`) |
+| `expiresInDays` | `30` | Number of days before the signing session expires |
+
 - You can pass multiple recipients per signing request, and multiple signing requests per call.
 - `fields` is optional — omit it if you don't need to pre-fill any values.
 
@@ -100,12 +124,12 @@ sequenceDiagram
 sequenceDiagram
     participant UI as Frontend
     participant BE as Backend
-    participant API as NomaSign /api/templates/{id}/send
+    participant API as NomaSign /api/templates/send
 
     UI->>BE: POST /api/signing/templates/{id}/send
     Note over BE: EnsureAccessTokenAsync()
     Note over BE: Map demo DTO to Integration API payload shape
-    BE->>API: POST /api/templates/{id}/send (Bearer token)
+    BE->>API: POST /api/templates/send (Bearer token, templateId in body)
     API-->>BE: { sessionId, ... }
     BE-->>UI: passes JSON through unchanged
 ```
@@ -116,7 +140,7 @@ The frontend sends a flat request:
 { "label": "Signer 1", "name": "Jane Doe", "email": "jane@example.com" }
 ```
 
-`NomaSignService.SendTemplateAsync` wraps it into the nested `signingRequests` shape the Integration API expects.
+`NomaSignService.SendTemplateAsync` wraps it into the nested `signingRequests` shape the Integration API expects, adding `templateId` to the body.
 
 ### Code paths
 

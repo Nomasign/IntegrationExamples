@@ -79,7 +79,7 @@ public class NomaSignClient : INomaSignClient
     public async Task<JsonElement> SendTemplateAsync(string accessToken, string templateId, IntegrationSendPayload payload)
     {
         var json = JsonSerializer.Serialize(payload);
-        using var request = new HttpRequestMessage(HttpMethod.Post, Url($"/api/templates/{templateId}/send"))
+        using var request = new HttpRequestMessage(HttpMethod.Post, Url("/api/templates/send"))
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
