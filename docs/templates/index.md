@@ -12,7 +12,7 @@ Templates are **user-scoped**. The Integration API can only access templates cre
 
 A recipient placeholder is a named slot in the template that gets filled with a real person when you send via API. The placeholder label (e.g. `Signer 1`) is what your API payload uses to map a real name/email to that slot.
 
-> **Placeholder labels are case-sensitive.** If your template says `Signer 1`, your API payload must use `"label": "Signer 1"` exactly.
+> **Placeholder labels are matched case-insensitively** (`"signer 1"` matches `Signer 1`). Keep your payload consistent with the template's casing for readability, but matching does not depend on it. A placeholder with no matching recipient returns `400 unmapped_placeholders`.
 
 ### Pre-fillable fields
 
@@ -36,13 +36,16 @@ Returns all templates owned by the authenticated integrator account.
 ## Sending a template
 
 ```
-POST /api/templates/{id}/send
+POST /api/templates/send
 Authorization: Bearer <access_token>
 Content-Type: application/json
 ```
 
+The template ID is a **required field in the body** (not a URL path parameter):
+
 ```json
 {
+  "templateId": "<template-id>",
   "signingRequests": [{
     "recipients": [{
       "label": "Signer 1",
@@ -100,12 +103,12 @@ sequenceDiagram
 sequenceDiagram
     participant UI as Frontend
     participant BE as Backend
-    participant API as NomaSign /api/templates/{id}/send
+    participant API as NomaSign /api/templates/send
 
     UI->>BE: POST /api/signing/templates/{id}/send
     Note over BE: EnsureAccessTokenAsync()
-    Note over BE: Map demo DTO to Integration API payload shape
-    BE->>API: POST /api/templates/{id}/send (Bearer token)
+    Note over BE: Map demo DTO to Integration API payload shape (templateId in body)
+    BE->>API: POST /api/templates/send (templateId in body, Bearer token)
     API-->>BE: { sessionId, ... }
     BE-->>UI: passes JSON through unchanged
 ```

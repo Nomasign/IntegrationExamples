@@ -3,7 +3,7 @@
 | Problem | Cause | Solution |
 |---------|-------|----------|
 | `GET /api/templates` returns empty array | Templates were created by a different account | Log in as the integrator and create templates there |
-| API payload rejected: "recipient label not found" | Label mismatch (case-sensitive) | Check exact spelling/casing of recipient placeholders in the template |
+| `400 unmapped_placeholders` on send | A template placeholder has no matching recipient. Recipient labels are matched **case-insensitively**, so check spelling (not casing) | Give every placeholder label a recipient with the same label in `signingRequests[].recipients[]` |
 | Document sends but fields are empty | Field labels in API don't match template | Compare `fields[].label` in your payload with the template's field names exactly |
 | Template not visible after creation | Browser cache or wrong account session | Hard-refresh, verify you're logged in as the integrator (check profile menu) |
 | "Template not found" error on send | Wrong template ID or template was deleted | Verify the ID via `GET /api/templates` — copy from the response |
