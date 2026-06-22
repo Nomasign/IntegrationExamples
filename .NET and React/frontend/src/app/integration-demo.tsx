@@ -1,10 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { z } from "zod";
 import { RequestBuilder, ApiResponse } from "./components/request-builder";
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:5203";
+
+// Default Integration API target (production). Custom URLs the user adds are
+// kept in localStorage under CUSTOM_URLS_KEY; the active selection under SELECTED_URL_KEY.
+const PROD_API_URL = "https://integration.nomasign.com";
+const CUSTOM_URLS_KEY = "nomasign_demo_custom_api_urls";
+const SELECTED_URL_KEY = "nomasign_demo_selected_api_url";
 const DOCS_BASE = "https://github.com/Nomasign/IntegrationExamples/blob/main/docs";
 
 function ProcessDocLink({ domain, label }: { domain: string; label?: string }) {
@@ -21,8 +26,6 @@ function ProcessDocLink({ domain, label }: { domain: string; label?: string }) {
   );
 }
 
-type Template = { id: string; title: string };
-
 async function readResponseBody(res: Response): Promise<object> {
   const text = await res.text();
   if (!text) return {};
@@ -35,45 +38,26 @@ async function readResponseBody(res: Response): Promise<object> {
   }
 }
 
-function getTemplatesFromResponse(data: object): Template[] {
-  if (!("items" in data) || !Array.isArray(data.items)) return [];
-
-  return data.items.flatMap((item): Template[] => {
-    if (!item || typeof item !== "object") return [];
-    const template = item as Record<string, unknown>;
-    if (typeof template.id !== "string") return [];
-
-    return [{
-      id: template.id,
-      title: typeof template.title === "string" ? template.title : template.id,
-    }];
-  });
-}
-
-const sendFormSchema = z.object({
-  templateId: z.string().min(1, "Template ID is required — select one from Step 2 or paste an ID"),
-  label: z.string().min(1, "Recipient label is required"),
-  name: z.string().min(1, "Recipient name is required — this is shown on the signing document"),
-  email: z.string().min(1, "Recipient email is required").email("Must be a valid email address"),
-});
-
-type SendFormErrors = Partial<Record<keyof z.infer<typeof sendFormSchema>, string>>;
-
 export function IntegrationDemo() {
   const [refreshToken, setRefreshToken] = useState("");
   const [refreshTokenConfigured, setRefreshTokenConfigured] = useState(false);
   const [isSavingRefreshToken, setIsSavingRefreshToken] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  // Integration API base URL — global; governs every API call (auth, list,
+  // send). Defaults to production; add your own for a self-hosted instance or
+  // local testing. Custom URLs + the current selection persist in localStorage.
+  const [apiBaseUrl, setApiBaseUrl] = useState(PROD_API_URL);
+  const [customUrls, setCustomUrls] = useState<string[]>([]);
+  const [isSavingBaseUrl, setIsSavingBaseUrl] = useState(false);
+
   // Responses
   const [authResponse, setAuthResponse] = useState<ApiResponse>(null);
-  const [templatesResponse, setTemplatesResponse] = useState<ApiResponse>(null);
   const [sendResponse, setSendResponse] = useState<ApiResponse>(null);
   const [webhooksResponse, setWebhooksResponse] = useState<ApiResponse>(null);
 
   // Loading states
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(false);
   const [isSavingSecret, setIsSavingSecret] = useState(false);
@@ -81,16 +65,10 @@ export function IntegrationDemo() {
   // Other state
   const [webhookSecret, setWebhookSecret] = useState("");
   const [webhookSecretConfigured, setWebhookSecretConfigured] = useState(false);
-  const [templates, setTemplates] = useState<Template[]>([]);
   const [status, setStatus] = useState("");
   const [backendStatus, setBackendStatus] = useState<"checking" | "online" | "offline">("checking");
-  const [sendForm, setSendForm] = useState({
-    templateId: "",
-    label: "Recipient 1",
-    name: "",
-    email: "",
-  });
-  const [sendFormErrors, setSendFormErrors] = useState<SendFormErrors>({});
+  // The send body — pasted from the app's "Copy Payload for Integration" action.
+  const [payloadJson, setPayloadJson] = useState("");
 
   // Check backend health on mount and every 10 seconds.
   useEffect(() => {
@@ -120,7 +98,86 @@ export function IntegrationDemo() {
       .then((r) => r.json())
       .then((d) => setWebhookSecretConfigured(d.configured))
       .catch(() => {});
+      
+    // Load saved custom URLs, then resolve the active base URL. A selection
+    // saved in localStorage wins (and is re-applied to the backend, whose
+    // RuntimeSettings resets to the default on restart); otherwise use whatever
+    // the backend currently reports.
+    let savedCustom: string[] = [];
+    try {
+      savedCustom = JSON.parse(localStorage.getItem(CUSTOM_URLS_KEY) ?? "[]");
+      if (Array.isArray(savedCustom)) setCustomUrls(savedCustom);
+    } catch {
+      /* ignore malformed storage */
+    }
+    const savedSelection = localStorage.getItem(SELECTED_URL_KEY);
+    if (savedSelection) {
+      saveBaseUrl(savedSelection, { persistCustom: false });
+    } else {
+      fetch(`${API}/api/signing/config/base-url`)
+        .then((r) => r.json())
+        .then((d) => setApiBaseUrl(d.baseUrl ?? PROD_API_URL))
+        .catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Push a base URL to the backend, persist the selection, and (optionally) the
+  // custom URL itself. Changing the target clears the cached access token.
+  async function saveBaseUrl(url: string, opts: { persistCustom?: boolean } = {}) {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setIsSavingBaseUrl(true);
+    try {
+      const res = await fetch(`${API}/api/signing/config/base-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl: trimmed }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        const applied = d.baseUrl ?? trimmed;
+        setApiBaseUrl(applied);
+        localStorage.setItem(SELECTED_URL_KEY, applied);
+        if (opts.persistCustom && applied !== PROD_API_URL) {
+          setCustomUrls((prev) => {
+            if (prev.includes(applied)) return prev;
+            const next = [...prev, applied];
+            localStorage.setItem(CUSTOM_URLS_KEY, JSON.stringify(next));
+            return next;
+          });
+        }
+        // Switching environments invalidates any cached access token.
+        setIsAuthenticated(false);
+        setAuthResponse(null);
+      }
+    } finally {
+      setIsSavingBaseUrl(false);
+    }
+  }
+
+  function addCustomUrl() {
+    const input = window.prompt("Integration API URL (e.g. https://signing.yourcompany.com):");
+    if (!input) return;
+    const trimmed = input.trim();
+    try {
+      // Basic sanity check — must be a valid absolute URL.
+      new URL(trimmed);
+    } catch {
+      window.alert("Please enter a valid URL, including http(s)://");
+      return;
+    }
+    saveBaseUrl(trimmed, { persistCustom: true });
+  }
+
+  function removeCustomUrl(url: string) {
+    setCustomUrls((prev) => {
+      const next = prev.filter((u) => u !== url);
+      localStorage.setItem(CUSTOM_URLS_KEY, JSON.stringify(next));
+      return next;
+    });
+    if (apiBaseUrl === url) saveBaseUrl(PROD_API_URL);
+  }
 
   async function saveRefreshToken() {
     if (!refreshToken.trim()) return;
@@ -183,61 +240,24 @@ export function IntegrationDemo() {
     }
   }
 
-  async function loadTemplates() {
-    setIsLoadingTemplates(true);
-    setTemplatesResponse(null);
-    try {
-      const res = await fetch(`${API}/api/signing/templates`);
-      const data = await readResponseBody(res);
-      setTemplatesResponse({ status: res.status, raw: data });
-      if (!res.ok) {
-        setIsAuthenticated(false);
-        setStatus(`Failed to load templates (${res.status})`);
-        return;
-      }
-      setIsAuthenticated(true);
-      const loadedTemplates = getTemplatesFromResponse(data);
-      setTemplates(loadedTemplates);
-      setStatus(`Loaded ${loadedTemplates.length} templates`);
-    } catch (err) {
-      setTemplatesResponse({ status: 0, raw: { error: err instanceof Error ? err.message : String(err) } });
-      setStatus(`Cannot reach backend at ${API}`);
-    } finally {
-      setIsLoadingTemplates(false);
-    }
-  }
-
   async function sendTemplate() {
-    // Validate all fields with Zod
-    const result = sendFormSchema.safeParse(sendForm);
-    if (!result.success) {
-      const fieldErrors: SendFormErrors = {};
-      for (const issue of result.error.issues) {
-        const field = issue.path[0] as keyof SendFormErrors;
-        if (!fieldErrors[field]) {
-          fieldErrors[field] = issue.message;
-        }
-      }
-      setSendFormErrors(fieldErrors);
-      setStatus("Please fix the highlighted fields before sending");
+    // The payload is the JSON copied from the app's "Copy Payload for
+    // Integration" action, edited to fill in real recipient name/email.
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(payloadJson);
+    } catch {
+      setStatus("Payload is not valid JSON — paste the copied payload and fix any edits.");
       return;
     }
-    setSendFormErrors({});
     setIsSending(true);
     setSendResponse(null);
     try {
-      const res = await fetch(
-        `${API}/api/signing/templates/${sendForm.templateId}/send`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            label: sendForm.label,
-            name: sendForm.name,
-            email: sendForm.email,
-          }),
-        }
-      );
+      const res = await fetch(`${API}/api/signing/templates/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed),
+      });
       const data = await readResponseBody(res);
       setSendResponse({ status: res.status, raw: data });
       if (!res.ok) {
@@ -276,6 +296,44 @@ export function IntegrationDemo() {
           Run <code className="font-mono text-xs">dotnet run</code> in the Backend folder to start the server.
         </div>
       )}
+
+      {/* Global: Integration API target */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+        <label htmlFor="api-target" className="text-xs font-medium text-muted-foreground">
+          Integration API
+        </label>
+        <select
+          id="api-target"
+          value={apiBaseUrl}
+          disabled={isSavingBaseUrl}
+          onChange={(e) => {
+            if (e.target.value === "__add__") addCustomUrl();
+            else saveBaseUrl(e.target.value);
+          }}
+          className="rounded border border-input bg-background px-2 py-1 font-mono text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          <option value={PROD_API_URL}>Production — {PROD_API_URL}</option>
+          {customUrls.map((u) => (
+            <option key={u} value={u}>
+              {u}
+            </option>
+          ))}
+          <option value="__add__">+ Add custom URL…</option>
+        </select>
+        {apiBaseUrl !== PROD_API_URL && customUrls.includes(apiBaseUrl) && (
+          <button
+            onClick={() => removeCustomUrl(apiBaseUrl)}
+            disabled={isSavingBaseUrl}
+            className="text-xs text-muted-foreground underline-offset-2 hover:text-destructive hover:underline disabled:opacity-50"
+          >
+            Remove
+          </button>
+        )}
+        <span className="ml-auto text-[10px] text-muted-foreground">
+          Token must come from this environment, or auth fails with{" "}
+          <code className="font-mono">invalid_grant</code>.
+        </span>
+      </div>
 
       {/* Status bar */}
       {status && (
@@ -352,150 +410,68 @@ export function IntegrationDemo() {
         </div>
       </section>
 
-      {/* Step 2: List Templates */}
+      {/* Step 2: Get your template payload */}
       <section className="rounded-lg border border-border bg-card p-6">
         <h2 className="text-lg font-semibold text-card-foreground">
-          2. List Templates
+          2. Get Your Template Payload
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Fetch available signing templates from the Integration API. The backend attaches the cached access token automatically and refreshes silently if it&apos;s expired.
+          In the NomaSign app, open a template&apos;s <strong>⋮</strong> menu and click{" "}
+          <strong>Copy Payload for Integration</strong>. That copies a ready-to-send JSON body —
+          the <code className="font-mono text-xs">templateId</code> plus a{" "}
+          <code className="font-mono text-xs">signingRequests</code> skeleton with{" "}
+          <code className="font-mono text-xs">&lt;NAME&gt;</code>/
+          <code className="font-mono text-xs">&lt;EMAIL&gt;</code> placeholders to fill in.
         </p>
         <div className="mt-1 mb-4"><ProcessDocLink domain="templates" /></div>
 
-        <RequestBuilder
-          method="GET"
-          url="/api/signing/templates"
-          info="Backend adds Authorization header internally (token managed server-side)"
-          onSend={loadTemplates}
-          sendLabel="List templates"
-          disabled={!refreshTokenConfigured}
-          disabledMessage="Save a refresh token first"
-          loading={isLoadingTemplates}
-          response={templatesResponse}
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+          Paste the copied payload, then replace the placeholders
+        </p>
+        <textarea
+          value={payloadJson}
+          onChange={(e) => setPayloadJson(e.target.value)}
+          rows={12}
+          spellCheck={false}
+          placeholder={`{\n  "templateId": "…",\n  "signingRequests": [\n    { "recipients": [{ "label": "Recipient 1", "name": "<NAME>", "email": "<EMAIL>" }] }\n  ]\n}`}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
         />
-
-        {/* Template list for selection */}
-        {templates.length > 0 && (
-          <div className="mt-4">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-              Select a template to use in Step 3
-            </p>
-            <ul className="divide-y divide-border rounded-md border border-border">
-              {templates.map((t) => (
-                <li
-                  key={t.id}
-                  className="flex items-center justify-between px-3 py-2"
-                >
-                  <div>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {t.id}
-                    </span>
-                    <span className="ml-2 text-sm text-foreground">
-                      {t.title}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() =>
-                      setSendForm((f) => ({ ...f, templateId: t.id }))
-                    }
-                    className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted transition-colors"
-                  >
-                    Use
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <p className="mt-1.5 text-[10px] text-muted-foreground">
+          Tip: the copied JSON includes comments describing each field; remove them (and the{" "}
+          <code className="font-mono">&lt;…&gt;</code> placeholders) before sending.
+        </p>
       </section>
 
-      {/* Step 3: Send Template */}
+      {/* Step 3: Send for Signature */}
       <section className="rounded-lg border border-border bg-card p-6">
         <h2 className="text-lg font-semibold text-card-foreground">
           3. Send for Signature
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Instantiate a template and send it to a recipient. The backend maps this simple <code className="font-mono text-xs">{`{ label, name, email }`}</code> DTO into the Integration API&apos;s nested <code className="font-mono text-xs">signingRequests</code> payload.
+          POST the payload to <code className="font-mono text-xs">/api/templates/send</code>. The
+          backend forwards it as-is and attaches the access token — no token ever reaches the
+          browser.
         </p>
         <div className="mt-1 mb-4"><ProcessDocLink domain="templates" /></div>
 
         <RequestBuilder
           method="POST"
-          url={`/api/signing/templates/${sendForm.templateId || ":id"}/send`}
+          url="/api/signing/templates/send"
           headers={[{ key: "Content-Type", value: "application/json" }]}
-          headerNote="Backend adds Authorization header internally"
+          headerNote="Backend adds the Authorization header internally"
           body={
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
-                    templateId
-                  </label>
-                  <input
-                    placeholder="Select from Step 2 or paste ID"
-                    value={sendForm.templateId}
-                    onChange={(e) => { setSendForm((f) => ({ ...f, templateId: e.target.value })); setSendFormErrors((prev) => ({ ...prev, templateId: undefined })); }}
-                    className={`flex-1 rounded border px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 ${sendFormErrors.templateId ? 'border-red-500 bg-red-50 dark:bg-red-950/20 focus:border-red-500 focus:ring-red-500' : 'border-input bg-background focus:border-primary focus:ring-ring'}`}
-                  />
-                </div>
-                {sendFormErrors.templateId && (
-                  <p className="ml-[7.5rem] text-[11px] font-medium text-red-600 dark:text-red-400">{sendFormErrors.templateId}</p>
-                )}
-              </div>
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
-                    label
-                  </label>
-                  <input
-                    placeholder="Recipient 1"
-                    value={sendForm.label}
-                    onChange={(e) => { setSendForm((f) => ({ ...f, label: e.target.value })); setSendFormErrors((prev) => ({ ...prev, label: undefined })); }}
-                    className={`flex-1 rounded border px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 ${sendFormErrors.label ? 'border-red-500 bg-red-50 dark:bg-red-950/20 focus:border-red-500 focus:ring-red-500' : 'border-input bg-background focus:border-primary focus:ring-ring'}`}
-                  />
-                </div>
-                {sendFormErrors.label && (
-                  <p className="ml-[7.5rem] text-[11px] font-medium text-red-600 dark:text-red-400">{sendFormErrors.label}</p>
-                )}
-              </div>
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
-                    name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    placeholder="John Doe"
-                    value={sendForm.name}
-                    onChange={(e) => { setSendForm((f) => ({ ...f, name: e.target.value })); setSendFormErrors((prev) => ({ ...prev, name: undefined })); }}
-                    className={`flex-1 rounded border px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 ${sendFormErrors.name ? 'border-red-500 bg-red-50 dark:bg-red-950/20 focus:border-red-500 focus:ring-red-500' : 'border-input bg-background focus:border-primary focus:ring-ring'}`}
-                  />
-                </div>
-                {sendFormErrors.name && (
-                  <p className="ml-[7.5rem] text-[11px] font-medium text-red-600 dark:text-red-400">{sendFormErrors.name}</p>
-                )}
-              </div>
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <label className="w-28 shrink-0 font-mono text-xs text-muted-foreground">
-                    email <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="john@example.com"
-                    value={sendForm.email}
-                    onChange={(e) => { setSendForm((f) => ({ ...f, email: e.target.value })); setSendFormErrors((prev) => ({ ...prev, email: undefined })); }}
-                    className={`flex-1 rounded border px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 ${sendFormErrors.email ? 'border-red-500 bg-red-50 dark:bg-red-950/20 focus:border-red-500 focus:ring-red-500' : 'border-input bg-background focus:border-primary focus:ring-ring'}`}
-                  />
-                </div>
-                {sendFormErrors.email && (
-                  <p className="ml-[7.5rem] text-[11px] font-medium text-red-600 dark:text-red-400">{sendFormErrors.email}</p>
-                )}
-              </div>
-            </div>
+            <textarea
+              value={payloadJson}
+              onChange={(e) => setPayloadJson(e.target.value)}
+              rows={12}
+              spellCheck={false}
+              placeholder="Paste your template payload in Step 2, or edit it here before sending."
+              className="w-full rounded border border-input bg-background p-3 font-mono text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+            />
           }
           onSend={sendTemplate}
-          disabled={!isAuthenticated}
-          disabledMessage="Authenticate first"
+          disabled={!isAuthenticated || !payloadJson.trim()}
+          disabledMessage={!isAuthenticated ? "Authenticate first" : "Paste a payload in Step 2"}
           loading={isSending}
           response={sendResponse}
         />

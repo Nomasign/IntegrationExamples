@@ -16,11 +16,12 @@ public interface INomaSignClient
     /// <summary>Exchange a refresh token for an access token.</summary>
     Task<TokenResponse> ExchangeTokenAsync(string refreshToken);
 
-    /// <summary>Fetch templates available to the authenticated user.</summary>
-    Task<JsonElement> GetTemplatesAsync(string accessToken);
-
-    /// <summary>Send a template to recipients.</summary>
-    Task<JsonElement> SendTemplateAsync(string accessToken, string templateId, IntegrationSendPayload payload);
+    /// <summary>
+    /// Forward a pre-built send payload to POST /api/templates/send.
+    /// The payload (templateId + signingRequests) comes straight from the
+    /// "Copy Payload for Integration" action in the NomaSign app.
+    /// </summary>
+    Task<JsonElement> SendRawAsync(string accessToken, JsonElement payload);
 }
 
 public class NomaSignClient : INomaSignClient
@@ -61,26 +62,10 @@ public class NomaSignClient : INomaSignClient
         return token ?? throw new NomaSignApiException("Empty token response", 500);
     }
 
-    public async Task<JsonElement> GetTemplatesAsync(string accessToken)
+    public async Task<JsonElement> SendRawAsync(string accessToken, JsonElement payload)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, Url("/api/templates"));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-        var response = await Http().SendAsync(request);
-        if (!response.IsSuccessStatusCode)
-        {
-            var error = await response.Content.ReadAsStringAsync();
-            throw new NomaSignApiException($"Failed to list templates: {error}", (int)response.StatusCode);
-        }
-
-        return await response.Content.ReadFromJsonAsync<JsonElement>();
-    }
-
-    public async Task<JsonElement> SendTemplateAsync(string accessToken, string templateId, IntegrationSendPayload payload)
-    {
-        // templateId goes in the body — the endpoint is POST /api/templates/send,
-        // not a /{id}/send path parameter.
-        var json = JsonSerializer.Serialize(payload with { TemplateId = templateId });
+        // Forward the payload as-is — it already carries templateId + signingRequests.
+        var json = JsonSerializer.Serialize(payload);
         using var request = new HttpRequestMessage(HttpMethod.Post, Url("/api/templates/send"))
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")

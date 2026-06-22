@@ -22,8 +22,7 @@ public interface INomaSignService
     /// </summary>
     Task<AuthenticateResponse> AuthenticateAsync(bool forceRefresh = false);
 
-    Task<JsonElement> GetTemplatesAsync();
-    Task<JsonElement> SendTemplateAsync(string templateId, SendTemplateRequest request);
+    Task<JsonElement> SendRawAsync(JsonElement payload);
 
     /// <summary>Store the user's refresh token in the secret store.</summary>
     Task SetRefreshTokenAsync(string refreshToken);
@@ -73,40 +72,15 @@ public class NomaSignService : INomaSignService
         return new AuthenticateResponse(Authenticated: true, FromCache: false, ExpiresAt: _accessExpiresAt);
     }
 
-    public async Task<JsonElement> GetTemplatesAsync()
-    {
-        var token = await EnsureAccessTokenAsync();
-        return await _client.GetTemplatesAsync(token);
-    }
-
     /// <summary>
-    /// Maps the simple frontend request (name, email, label) into the
-    /// Integration API's signingRequests payload format.
+    /// Forwards a pre-built send payload (templateId + signingRequests) to the
+    /// Integration API, attaching the cached access token. The payload comes
+    /// from the "Copy Payload for Integration" action in the NomaSign app.
     /// </summary>
-    public async Task<JsonElement> SendTemplateAsync(string templateId, SendTemplateRequest request)
+    public async Task<JsonElement> SendRawAsync(JsonElement payload)
     {
         var token = await EnsureAccessTokenAsync();
-
-        var payload = new IntegrationSendPayload
-        {
-            SigningRequests = [
-                new IntegrationSigningRequest
-                {
-                    Recipients = [
-                        new IntegrationRecipient
-                        {
-                            Label = request.Label,
-                            Name = request.Name,
-                            Email = request.Email
-                        }
-                    ],
-                    Fields = []
-                }
-            ],
-            SendInitialNotification = true
-        };
-
-        return await _client.SendTemplateAsync(token, templateId, payload);
+        return await _client.SendRawAsync(token, payload);
     }
 
     /// <summary>
