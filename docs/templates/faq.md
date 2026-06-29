@@ -28,6 +28,13 @@ Yes. `customer_name` and `Customer_Name` are different labels. Your API payload 
 
 Unknown fields are silently ignored — the document is sent without them.
 
+### My template has two fields with the same label — how do I fill both?
+
+Each field is independent. Address duplicates with a numeric suffix: `"amount"`
+fills the first field labelled `amount`, `"amount 2"` the second, `"amount 3"`
+the third. A single `"amount"` entry fills only the first. The **Copy Payload**
+button already emits these suffixes, so copy from there rather than guessing.
+
 ### What happens if I omit a required field?
 
 If a field is marked as required in the template and not pre-filled by the API, the signer will be prompted to fill it in manually during signing.

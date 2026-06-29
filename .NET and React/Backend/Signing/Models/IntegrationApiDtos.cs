@@ -12,51 +12,9 @@ public record TokenResponse(
     [property: JsonPropertyName("expires_in")] int ExpiresIn,
     [property: JsonPropertyName("token_type")] string TokenType);
 
-/// <summary>Body sent to POST /api/templates/send (templateId is a required body field).</summary>
-public record IntegrationSendPayload
-{
-    [JsonPropertyName("templateId")]
-    public string? TemplateId { get; init; }
-
-    [JsonPropertyName("signingRequests")]
-    public required IntegrationSigningRequest[] SigningRequests { get; init; }
-
-    [JsonPropertyName("sendInitialNotification")]
-    public bool SendInitialNotification { get; init; } = true;
-}
-
-public record IntegrationSigningRequest
-{
-    [JsonPropertyName("recipients")]
-    public required IntegrationRecipient[] Recipients { get; init; }
-
-    [JsonPropertyName("fields")]
-    public IntegrationFieldValue[] Fields { get; init; } = [];
-}
-
-public record IntegrationRecipient
-{
-    [JsonPropertyName("label")]
-    public required string Label { get; init; }
-
-    [JsonPropertyName("name")]
-    public required string Name { get; init; }
-
-    [JsonPropertyName("email")]
-    public required string Email { get; init; }
-}
-
-public record IntegrationFieldValue
-{
-    [JsonPropertyName("label")]
-    public required string Label { get; init; }
-
-    [JsonPropertyName("recipient")]
-    public string? Recipient { get; init; }
-
-    [JsonPropertyName("value")]
-    public required string Value { get; init; }
-}
+// The send payload (templateId + signingRequests) is built in the NomaSign app
+// via "Copy Payload for Integration" and forwarded as raw JSON, so it needs no
+// DTO here. See TemplatesController.Send / NomaSignClient.SendRawAsync.
 
 /// <summary>Webhook payload delivered by NomaSign to our endpoint.</summary>
 public record WebhookPayload(string Id, string Type, string ApiVersion, DateTime CreatedAt, WebhookSession? Session);

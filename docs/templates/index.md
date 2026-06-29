@@ -24,14 +24,12 @@ Any text fields you add to the template can be pre-filled by the API using their
 | `contract_start_date` | `Field 2` |
 | `salary_amount` | `Input` |
 
-## Listing templates
-
-```
-GET /api/templates
-Authorization: Bearer <access_token>
-```
-
-Returns all templates owned by the authenticated integrator account.
+> **Duplicate field labels** are addressed with a numeric suffix. If a template
+> has two fields both labelled `amount` for the same recipient, `"amount"` fills
+> the first and `"amount 2"` fills the second. Each field is independent — a
+> single `"amount"` entry fills only the first, not both. The labels emitted by
+> the web app's **Copy Payload** button already include these suffixes, so the
+> simplest path is to start from that payload.
 
 ## Sending a template
 
@@ -67,8 +65,8 @@ The template ID is a **required field in the body** (not a URL path parameter):
 
 ## Finding a template ID
 
+- **Copy Payload** — in the web app, open the template's ⋯ menu and click **Copy Payload for Integration**; the `templateId` (and all field labels) are included
 - **URL bar** — when viewing the template in the NomaSign web app, the ID is in the URL
-- **API** — call `GET /api/templates` and look at the `id` field in the response
 
 ## Template checklist (before going live)
 

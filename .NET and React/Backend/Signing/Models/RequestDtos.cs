@@ -1,16 +1,8 @@
 namespace Backend.Signing.Models;
 
 // ─── Frontend request DTOs ────────────────────────────────────────────────────
-// These are intentionally simple — the frontend sends basic data,
-// the service layer maps it to what the Integration API expects.
-
-/// <summary>POST /api/templates/{id}/send — frontend sends one recipient.</summary>
-public record SendTemplateRequest
-{
-    public string Label { get; init; } = "Recipient 1";
-    public string Name { get; init; } = "";
-    public string Email { get; init; } = "";
-}
+// The send payload itself is forwarded as raw JSON (see TemplatesController.Send),
+// so there's no send DTO here — only the small config writes below.
 
 /// <summary>POST /api/config/refresh-token — frontend stores the long-lived refresh token.</summary>
 public record SetRefreshTokenRequest(string RefreshToken);
