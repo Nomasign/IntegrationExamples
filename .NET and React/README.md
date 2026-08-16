@@ -103,5 +103,5 @@ Two long-lived secrets live in `ISecretStore`:
 ## What's demonstrated
 
 1. **Authenticate** — store the refresh token, exchange it for an access token
-2. **Send for signature** — map the demo DTO to the [Integration API payload](../docs/templates.md), using a template id copied from the web app
+2. **Send for signature** — forward the [request payload](../docs/templates.md) pasted from the web app's Copy payload action
 3. **Webhook notifications** — [HMAC-verify](../docs/webhooks.md) and parse inbound deliveries

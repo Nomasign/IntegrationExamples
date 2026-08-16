@@ -97,6 +97,7 @@ No — templates are per-account. Recreate it on each account that needs it.
 | Layer | File |
 |---|---|
 | Send endpoint | `Backend/Signing/Controllers/TemplatesController.cs` → `Send` |
-| Orchestration | `Backend/Signing/Services/NomaSignService.cs` → `SendTemplateAsync` |
-| DTO mapping | `Backend/Signing/Models/IntegrationApiDtos.cs` |
-| HTTP calls | `Backend/Signing/Clients/NomaSignClient.cs` → `SendTemplateAsync` |
+| Orchestration | `Backend/Signing/Services/NomaSignService.cs` → `SendRawAsync` |
+| HTTP calls | `Backend/Signing/Clients/NomaSignClient.cs` → `SendRawAsync` |
+
+The demo forwards the payload exactly as pasted from the web app's **Copy payload** action; there is no DTO mapping layer to keep in sync with the API.
