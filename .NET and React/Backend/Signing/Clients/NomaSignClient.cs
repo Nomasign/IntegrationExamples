@@ -16,8 +16,12 @@ public interface INomaSignClient
     /// <summary>Exchange a refresh token for an access token.</summary>
     Task<TokenResponse> ExchangeTokenAsync(string refreshToken);
 
-    /// <summary>Send a template to recipients. The template id travels in the payload.</summary>
-    Task<JsonElement> SendTemplateAsync(string accessToken, IntegrationSendPayload payload);
+    /// <summary>
+    /// Forward a pre-built send payload to POST /api/templates/send.
+    /// The payload (templateId + signingRequests) comes straight from the
+    /// "Copy Payload for Integration" action in the NomaSign app.
+    /// </summary>
+    Task<JsonElement> SendRawAsync(string accessToken, JsonElement payload);
 }
 
 public class NomaSignClient : INomaSignClient
@@ -56,8 +60,9 @@ public class NomaSignClient : INomaSignClient
         return token ?? throw new NomaSignApiException("Empty token response", 500);
     }
 
-    public async Task<JsonElement> SendTemplateAsync(string accessToken, IntegrationSendPayload payload)
+    public async Task<JsonElement> SendRawAsync(string accessToken, JsonElement payload)
     {
+        // Forward the payload as-is — it already carries templateId + signingRequests.
         var json = JsonSerializer.Serialize(payload);
         using var request = new HttpRequestMessage(HttpMethod.Post, Url("/api/templates/send"))
         {

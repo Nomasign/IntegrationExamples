@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Backend.Signing.Clients;
 using Backend.Signing.Models;
 using Backend.Signing.Services;
@@ -17,19 +18,20 @@ public class TemplatesController : ControllerBase
     }
 
     /// <summary>
-    /// Send a template for signature.
-    /// The frontend sends a simple { label, name, email } — the service layer
-    /// maps this into the Integration API's signingRequests format.
+    /// Send a template for signature. The frontend POSTs the payload copied from
+    /// the NomaSign app's "Copy Payload for Integration" action (templateId +
+    /// signingRequests); the backend forwards it as-is with the access token
+    /// attached. (Templates are discovered in the app, not via a list endpoint.)
     /// </summary>
-    [HttpPost("{templateId}/send")]
-    public async Task<IActionResult> Send(string templateId, [FromBody] SendTemplateRequest request)
+    [HttpPost("send")]
+    public async Task<IActionResult> Send([FromBody] JsonElement payload)
     {
-        if (string.IsNullOrWhiteSpace(request.Email))
-            return BadRequest("Email is required.");
+        if (payload.ValueKind != JsonValueKind.Object || !payload.TryGetProperty("templateId", out _))
+            return BadRequest("Payload must be a JSON object with a templateId.");
 
         try
         {
-            var result = await _nomaSignService.SendTemplateAsync(templateId, request);
+            var result = await _nomaSignService.SendRawAsync(payload);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
