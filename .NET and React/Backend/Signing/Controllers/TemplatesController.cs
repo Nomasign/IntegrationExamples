@@ -17,28 +17,6 @@ public class TemplatesController : ControllerBase
     }
 
     /// <summary>
-    /// List available signing templates.
-    /// The frontend just calls GET — no parameters needed.
-    /// </summary>
-    [HttpGet]
-    public async Task<IActionResult> List()
-    {
-        try
-        {
-            var templates = await _nomaSignService.GetTemplatesAsync();
-            return Ok(templates);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Unauthorized(new { error = ex.Message });
-        }
-        catch (NomaSignApiException ex)
-        {
-            return Problem(ex.Message, statusCode: ex.StatusCode);
-        }
-    }
-
-    /// <summary>
     /// Send a template for signature.
     /// The frontend sends a simple { label, name, email } — the service layer
     /// maps this into the Integration API's signingRequests format.

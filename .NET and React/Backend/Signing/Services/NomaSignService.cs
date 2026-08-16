@@ -22,7 +22,6 @@ public interface INomaSignService
     /// </summary>
     Task<AuthenticateResponse> AuthenticateAsync(bool forceRefresh = false);
 
-    Task<JsonElement> GetTemplatesAsync();
     Task<JsonElement> SendTemplateAsync(string templateId, SendTemplateRequest request);
 
     /// <summary>Store the user's refresh token in the secret store.</summary>
@@ -73,12 +72,6 @@ public class NomaSignService : INomaSignService
         return new AuthenticateResponse(Authenticated: true, FromCache: false, ExpiresAt: _accessExpiresAt);
     }
 
-    public async Task<JsonElement> GetTemplatesAsync()
-    {
-        var token = await EnsureAccessTokenAsync();
-        return await _client.GetTemplatesAsync(token);
-    }
-
     /// <summary>
     /// Maps the simple frontend request (name, email, label) into the
     /// Integration API's signingRequests payload format.
@@ -89,6 +82,7 @@ public class NomaSignService : INomaSignService
 
         var payload = new IntegrationSendPayload
         {
+            TemplateId = templateId,
             SigningRequests = [
                 new IntegrationSigningRequest
                 {
@@ -106,7 +100,7 @@ public class NomaSignService : INomaSignService
             SendInitialNotification = true
         };
 
-        return await _client.SendTemplateAsync(token, templateId, payload);
+        return await _client.SendTemplateAsync(token, payload);
     }
 
     /// <summary>

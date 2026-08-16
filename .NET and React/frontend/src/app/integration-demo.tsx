@@ -5,12 +5,13 @@ import { z } from "zod";
 import { RequestBuilder, ApiResponse } from "./components/request-builder";
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:5203";
-const DOCS_BASE = "https://github.com/Nomasign/IntegrationExamples/blob/main/docs";
+const REPO_URL = "https://github.com/Nomasign/IntegrationExamples";
+const DOCS_BASE = `${REPO_URL}/blob/main/docs`;
 
-function ProcessDocLink({ domain, label }: { domain: string; label?: string }) {
+function ProcessDocLink({ href, label }: { href: string; label?: string }) {
   return (
     <a
-      href={`${DOCS_BASE}/${domain}/index.md`}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
       className="inline-flex min-h-9 items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm font-semibold text-primary shadow-sm transition-colors hover:border-primary hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -20,8 +21,6 @@ function ProcessDocLink({ domain, label }: { domain: string; label?: string }) {
     </a>
   );
 }
-
-type Template = { id: string; title: string };
 
 async function readResponseBody(res: Response): Promise<object> {
   const text = await res.text();
@@ -35,23 +34,8 @@ async function readResponseBody(res: Response): Promise<object> {
   }
 }
 
-function getTemplatesFromResponse(data: object): Template[] {
-  if (!("items" in data) || !Array.isArray(data.items)) return [];
-
-  return data.items.flatMap((item): Template[] => {
-    if (!item || typeof item !== "object") return [];
-    const template = item as Record<string, unknown>;
-    if (typeof template.id !== "string") return [];
-
-    return [{
-      id: template.id,
-      title: typeof template.title === "string" ? template.title : template.id,
-    }];
-  });
-}
-
 const sendFormSchema = z.object({
-  templateId: z.string().min(1, "Template ID is required — select one from Step 2 or paste an ID"),
+  templateId: z.string().min(1, "Template ID is required — copy it from the template's URL in the web app"),
   label: z.string().min(1, "Recipient label is required"),
   name: z.string().min(1, "Recipient name is required — this is shown on the signing document"),
   email: z.string().min(1, "Recipient email is required").email("Must be a valid email address"),
@@ -67,13 +51,11 @@ export function IntegrationDemo() {
 
   // Responses
   const [authResponse, setAuthResponse] = useState<ApiResponse>(null);
-  const [templatesResponse, setTemplatesResponse] = useState<ApiResponse>(null);
   const [sendResponse, setSendResponse] = useState<ApiResponse>(null);
   const [webhooksResponse, setWebhooksResponse] = useState<ApiResponse>(null);
 
   // Loading states
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(false);
   const [isSavingSecret, setIsSavingSecret] = useState(false);
@@ -81,7 +63,6 @@ export function IntegrationDemo() {
   // Other state
   const [webhookSecret, setWebhookSecret] = useState("");
   const [webhookSecretConfigured, setWebhookSecretConfigured] = useState(false);
-  const [templates, setTemplates] = useState<Template[]>([]);
   const [status, setStatus] = useState("");
   const [backendStatus, setBackendStatus] = useState<"checking" | "online" | "offline">("checking");
   const [sendForm, setSendForm] = useState({
@@ -183,30 +164,6 @@ export function IntegrationDemo() {
     }
   }
 
-  async function loadTemplates() {
-    setIsLoadingTemplates(true);
-    setTemplatesResponse(null);
-    try {
-      const res = await fetch(`${API}/api/signing/templates`);
-      const data = await readResponseBody(res);
-      setTemplatesResponse({ status: res.status, raw: data });
-      if (!res.ok) {
-        setIsAuthenticated(false);
-        setStatus(`Failed to load templates (${res.status})`);
-        return;
-      }
-      setIsAuthenticated(true);
-      const loadedTemplates = getTemplatesFromResponse(data);
-      setTemplates(loadedTemplates);
-      setStatus(`Loaded ${loadedTemplates.length} templates`);
-    } catch (err) {
-      setTemplatesResponse({ status: 0, raw: { error: err instanceof Error ? err.message : String(err) } });
-      setStatus(`Cannot reach backend at ${API}`);
-    } finally {
-      setIsLoadingTemplates(false);
-    }
-  }
-
   async function sendTemplate() {
     // Validate all fields with Zod
     const result = sendFormSchema.safeParse(sendForm);
@@ -290,9 +247,9 @@ export function IntegrationDemo() {
           1. Authenticate
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Store your long-lived refresh token, then exchange it for a short-lived access token. The access token is cached server-side and used as the Bearer token in Steps 2 &amp; 3. Neither token is ever returned to the browser.
+          Store your long-lived refresh token, then exchange it for a short-lived access token. The access token is cached server-side and used as the Bearer token in Step 2. Neither token is ever returned to the browser.
         </p>
-        <div className="mt-2 mb-4"><ProcessDocLink domain="authentication" /></div>
+        <div className="mt-2 mb-4"><ProcessDocLink href={`${REPO_URL}#quick-start`} /></div>
 
         {/* Sub-step 1.1: Refresh Token */}
         <div className="mt-5 rounded-md border border-border bg-muted/30 px-4 py-4">
@@ -352,72 +309,15 @@ export function IntegrationDemo() {
         </div>
       </section>
 
-      {/* Step 2: List Templates */}
+      {/* Step 2: Send Template */}
       <section className="rounded-lg border border-border bg-card p-6">
         <h2 className="text-lg font-semibold text-card-foreground">
-          2. List Templates
+          2. Send for Signature
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Fetch available signing templates from the Integration API. The backend attaches the cached access token automatically and refreshes silently if it&apos;s expired.
+          Instantiate a template and send it to a recipient. Copy the template id from the template&apos;s URL in the NomaSign web app (or use its <strong>Copy payload</strong> button). The backend maps this simple <code className="font-mono text-xs">{`{ label, name, email }`}</code> DTO into the Integration API&apos;s nested <code className="font-mono text-xs">signingRequests</code> payload.
         </p>
-        <div className="mt-1 mb-4"><ProcessDocLink domain="templates" /></div>
-
-        <RequestBuilder
-          method="GET"
-          url="/api/signing/templates"
-          info="Backend adds Authorization header internally (token managed server-side)"
-          onSend={loadTemplates}
-          sendLabel="List templates"
-          disabled={!refreshTokenConfigured}
-          disabledMessage="Save a refresh token first"
-          loading={isLoadingTemplates}
-          response={templatesResponse}
-        />
-
-        {/* Template list for selection */}
-        {templates.length > 0 && (
-          <div className="mt-4">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-              Select a template to use in Step 3
-            </p>
-            <ul className="divide-y divide-border rounded-md border border-border">
-              {templates.map((t) => (
-                <li
-                  key={t.id}
-                  className="flex items-center justify-between px-3 py-2"
-                >
-                  <div>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {t.id}
-                    </span>
-                    <span className="ml-2 text-sm text-foreground">
-                      {t.title}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() =>
-                      setSendForm((f) => ({ ...f, templateId: t.id }))
-                    }
-                    className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted transition-colors"
-                  >
-                    Use
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
-
-      {/* Step 3: Send Template */}
-      <section className="rounded-lg border border-border bg-card p-6">
-        <h2 className="text-lg font-semibold text-card-foreground">
-          3. Send for Signature
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Instantiate a template and send it to a recipient. The backend maps this simple <code className="font-mono text-xs">{`{ label, name, email }`}</code> DTO into the Integration API&apos;s nested <code className="font-mono text-xs">signingRequests</code> payload.
-        </p>
-        <div className="mt-1 mb-4"><ProcessDocLink domain="templates" /></div>
+        <div className="mt-1 mb-4"><ProcessDocLink href={`${DOCS_BASE}/templates.md`} /></div>
 
         <RequestBuilder
           method="POST"
@@ -432,7 +332,7 @@ export function IntegrationDemo() {
                     templateId
                   </label>
                   <input
-                    placeholder="Select from Step 2 or paste ID"
+                    placeholder="Paste the template id"
                     value={sendForm.templateId}
                     onChange={(e) => { setSendForm((f) => ({ ...f, templateId: e.target.value })); setSendFormErrors((prev) => ({ ...prev, templateId: undefined })); }}
                     className={`flex-1 rounded border px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 ${sendFormErrors.templateId ? 'border-red-500 bg-red-50 dark:bg-red-950/20 focus:border-red-500 focus:ring-red-500' : 'border-input bg-background focus:border-primary focus:ring-ring'}`}
@@ -481,7 +381,7 @@ export function IntegrationDemo() {
                   </label>
                   <input
                     type="email"
-                    placeholder="john@example.com"
+                    placeholder="john@nomasign.com"
                     value={sendForm.email}
                     onChange={(e) => { setSendForm((f) => ({ ...f, email: e.target.value })); setSendFormErrors((prev) => ({ ...prev, email: undefined })); }}
                     className={`flex-1 rounded border px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 ${sendFormErrors.email ? 'border-red-500 bg-red-50 dark:bg-red-950/20 focus:border-red-500 focus:ring-red-500' : 'border-input bg-background focus:border-primary focus:ring-ring'}`}
@@ -505,7 +405,7 @@ export function IntegrationDemo() {
       <section className="rounded-lg border border-dashed border-border bg-card p-6">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold text-card-foreground">
-            4. Webhook Notifications
+            3. Webhook Notifications
           </h2>
           <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             Optional
@@ -515,7 +415,7 @@ export function IntegrationDemo() {
           When signing completes, NomaSign POSTs HMAC-signed events to your webhook endpoint.
           This step requires your backend to be publicly reachable (deployed or via a tunnel — we recommend VS Code Dev Tunnels).
         </p>
-        <div className="mt-1 mb-4"><ProcessDocLink domain="webhooks" /></div>
+        <div className="mt-1 mb-4"><ProcessDocLink href={`${DOCS_BASE}/webhooks.md`} /></div>
 
         {/* HMAC Secret config */}
         <div className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-3">

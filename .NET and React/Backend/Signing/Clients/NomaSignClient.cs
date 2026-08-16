@@ -16,11 +16,8 @@ public interface INomaSignClient
     /// <summary>Exchange a refresh token for an access token.</summary>
     Task<TokenResponse> ExchangeTokenAsync(string refreshToken);
 
-    /// <summary>Fetch templates available to the authenticated user.</summary>
-    Task<JsonElement> GetTemplatesAsync(string accessToken);
-
-    /// <summary>Send a template to recipients.</summary>
-    Task<JsonElement> SendTemplateAsync(string accessToken, string templateId, IntegrationSendPayload payload);
+    /// <summary>Send a template to recipients. The template id travels in the payload.</summary>
+    Task<JsonElement> SendTemplateAsync(string accessToken, IntegrationSendPayload payload);
 }
 
 public class NomaSignClient : INomaSignClient
@@ -29,13 +26,11 @@ public class NomaSignClient : INomaSignClient
 
     private readonly IHttpClientFactory _httpFactory;
     private readonly RuntimeSettings _settings;
-    private readonly string _clientId;
 
-    public NomaSignClient(IHttpClientFactory httpFactory, IConfiguration config, RuntimeSettings settings)
+    public NomaSignClient(IHttpClientFactory httpFactory, RuntimeSettings settings)
     {
         _httpFactory = httpFactory;
         _settings = settings;
-        _clientId = config["NomaSign:ClientId"]!;
     }
 
     private HttpClient Http() => _httpFactory.CreateClient(HttpClientName);
@@ -43,11 +38,11 @@ public class NomaSignClient : INomaSignClient
 
     public async Task<TokenResponse> ExchangeTokenAsync(string refreshToken)
     {
+        // Only the refresh token is the caller's to provide — grant_type and
+        // client_id are fixed server-side by the Integration API's broker.
         var response = await Http().PostAsync(Url("/connect/token"),
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["grant_type"] = "refresh_token",
-                ["client_id"] = _clientId,
                 ["refresh_token"] = refreshToken
             }));
 
@@ -61,25 +56,10 @@ public class NomaSignClient : INomaSignClient
         return token ?? throw new NomaSignApiException("Empty token response", 500);
     }
 
-    public async Task<JsonElement> GetTemplatesAsync(string accessToken)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, Url("/api/templates"));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-        var response = await Http().SendAsync(request);
-        if (!response.IsSuccessStatusCode)
-        {
-            var error = await response.Content.ReadAsStringAsync();
-            throw new NomaSignApiException($"Failed to list templates: {error}", (int)response.StatusCode);
-        }
-
-        return await response.Content.ReadFromJsonAsync<JsonElement>();
-    }
-
-    public async Task<JsonElement> SendTemplateAsync(string accessToken, string templateId, IntegrationSendPayload payload)
+    public async Task<JsonElement> SendTemplateAsync(string accessToken, IntegrationSendPayload payload)
     {
         var json = JsonSerializer.Serialize(payload);
-        using var request = new HttpRequestMessage(HttpMethod.Post, Url($"/api/templates/{templateId}/send"))
+        using var request = new HttpRequestMessage(HttpMethod.Post, Url("/api/templates/send"))
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };

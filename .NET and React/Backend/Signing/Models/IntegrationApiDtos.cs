@@ -12,9 +12,12 @@ public record TokenResponse(
     [property: JsonPropertyName("expires_in")] int ExpiresIn,
     [property: JsonPropertyName("token_type")] string TokenType);
 
-/// <summary>Body sent to POST /api/templates/{id}/send.</summary>
+/// <summary>Body sent to POST /api/templates/send.</summary>
 public record IntegrationSendPayload
 {
+    [JsonPropertyName("templateId")]
+    public required string TemplateId { get; init; }
+
     [JsonPropertyName("signingRequests")]
     public required IntegrationSigningRequest[] SigningRequests { get; init; }
 
