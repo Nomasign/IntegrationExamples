@@ -30,13 +30,11 @@ public class NomaSignClient : INomaSignClient
 
     private readonly IHttpClientFactory _httpFactory;
     private readonly RuntimeSettings _settings;
-    private readonly string _clientId;
 
-    public NomaSignClient(IHttpClientFactory httpFactory, IConfiguration config, RuntimeSettings settings)
+    public NomaSignClient(IHttpClientFactory httpFactory, RuntimeSettings settings)
     {
         _httpFactory = httpFactory;
         _settings = settings;
-        _clientId = config["NomaSign:ClientId"]!;
     }
 
     private HttpClient Http() => _httpFactory.CreateClient(HttpClientName);
@@ -44,11 +42,11 @@ public class NomaSignClient : INomaSignClient
 
     public async Task<TokenResponse> ExchangeTokenAsync(string refreshToken)
     {
+        // Only the refresh token is the caller's to provide — grant_type and
+        // client_id are fixed server-side by the Integration API's broker.
         var response = await Http().PostAsync(Url("/connect/token"),
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["grant_type"] = "refresh_token",
-                ["client_id"] = _clientId,
                 ["refresh_token"] = refreshToken
             }));
 

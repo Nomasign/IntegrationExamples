@@ -1,87 +1,50 @@
 # NomaSign Integration Examples
 
-A full-stack example showing how to integrate with the NomaSign signing platform using the Integration API.
+A full-stack example (.NET + React) showing how to integrate with the [NomaSign](https://www.nomasign.com) signing platform: authenticate, send a template for signature, and receive webhook notifications.
 
-## Prerequisites
+## Where to find what
 
-Before running the example app, you need a NomaSign integration account with a **Refresh Token** and **Webhook Secret**.
+| Resource | What it's for |
+|---|---|
+| [Setup guide](https://www.nomasign.com/api/steps/) | Create your NomaSign account, integration account, template, and credentials — do this first |
+| [API reference](https://integration.nomasign.com/docs) | The authoritative interactive contract: endpoints, schemas, response codes, example payloads |
+| [Example app](.NET%20and%20React/README.md) | Runnable full-stack demo — clone, configure, run |
+| [Templates guide](docs/templates.md) | How to design templates that are good to integrate against |
+| [Direct send guide](docs/sessions.md) | Send your own generated PDFs for signature and get signing links back |
+| [Webhooks guide](docs/webhooks.md) | Event types and HMAC-SHA256 signature verification, with code |
 
-👉 **[Follow the Integration Setup Tutorial](./Integration%20Setup/README.md)** for step-by-step instructions with screenshots.
+## Quick start
 
-You'll need:
+**1. Get credentials** — follow the [setup guide](https://www.nomasign.com/api/steps/) to create an integration account and generate a **Refresh Token** and **Webhook Secret**.
 
-- **A NomaSign account** with a plan that supports integrations ([app.nomasign.com](https://app.nomasign.com)) — if you already have an account, just ensure your plan includes integration access
-- **An Integration account** — a dedicated email (e.g. `signing@yourdomain.com`) invited with the **Integrator** role
-- **At least one Signing Template** — with recipient placeholders and signature fields
-- **A Refresh Token & Webhook Secret** — generated from the Integration page
-
-## Technical Requirements
-
-- .NET 8 SDK
-- Node.js 18+
-- [pnpm](https://pnpm.io/installation) — install with `npm install -g pnpm` or see [pnpm docs](https://pnpm.io/installation) for other methods
-
-## Setup
-
-### 1. Configure the backend
-
-The backend reads its configuration from `.NET and React/Backend/appsettings.json`. The defaults point to the **production** Integration API — no changes are needed unless you're targeting a different environment.
-
-> **Refresh Token** and **Webhook Secret** are configured at runtime via the example app UI — no need to put secrets in config files.
->
-> You can also change the Integration API URL from the UI at runtime (useful for switching between environments).
-
-### 2. Run the backend
+**2. Exchange the refresh token for an access token** (~1 hour lifetime; cache it and re-exchange on expiry):
 
 ```bash
-cd ".NET and React/Backend"
-dotnet run
+curl -X POST "https://integration.nomasign.com/connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "refresh_token=YOUR_REFRESH_TOKEN"
 ```
 
-The API will start on `http://localhost:5203`. Swagger UI is at `http://localhost:5203/swagger`.
+Store the refresh token in a secrets manager — never in source code or frontend code. The access token is used as a `Bearer` token on all API calls and should never leave your backend.
 
-### 3. Run the frontend
+**3. Send a template for signature:**
 
 ```bash
-cd ".NET and React/frontend"
-pnpm install
-pnpm dev
+curl -X POST "https://integration.nomasign.com/api/templates/send" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "templateId": "YOUR_TEMPLATE_ID",
+    "signingRequests": [{
+      "recipients": [
+        { "label": "Signer 1", "name": "Jane Smith", "email": "jane.smith@nomasign.com" }
+      ]
+    }]
+  }'
 ```
 
-The UI will start on `http://localhost:4999`.
+**4. Receive webhooks** when signing completes — see the [webhooks guide](docs/webhooks.md).
 
-### 4. Configure your webhook URL
+## Run the example app
 
-In the NomaSign web-app Integration page, set your webhook endpoint to:
-
-```
-https://<your-tunnel-url>/api/signing/webhooks/nomasign
-```
-
-> **For local development**, you'll need a tunnel so NomaSign can reach your localhost. We recommend [VS Code Dev Tunnels](https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/) — they're free, built into VS Code, and support HTTPS with no third-party signup.
->
-> Quick setup:
-> ```bash
-> # In VS Code: Ctrl+Shift+P → "Dev Tunnels: Create Tunnel"
-> # Or via CLI:
-> devtunnel create --allow-anonymous
-> devtunnel port create -p 5203
-> devtunnel host
-> ```
-
-## Architecture & process docs
-
-- [`docs/architecture/`](docs/architecture/README.md) — system diagram and what's demonstrated end-to-end
-- [`docs/code-flow/`](docs/code-flow/) — per-step walkthrough of what happens behind each button in the demo UI
-
-## Key files
-
-| File | Purpose |
-|------|---------|
-| `.NET and React/Backend/Signing/Controllers/AuthController.cs` | `POST /api/signing/auth/token` — exchange refresh token for access token |
-| `.NET and React/Backend/Signing/Controllers/ConfigController.cs` | `POST /api/signing/config/{refresh-token,webhook-secret,base-url}` |
-| `.NET and React/Backend/Signing/Controllers/TemplatesController.cs` | `GET /api/signing/templates`, `POST /api/signing/templates/{id}/send` |
-| `.NET and React/Backend/Signing/Controllers/WebhooksController.cs` | `POST /api/signing/webhooks/nomasign` — receives + HMAC-verifies deliveries |
-| `.NET and React/Backend/Signing/Services/WebhookService.cs` | HMAC-SHA256 verification logic |
-| `.NET and React/Backend/Signing/Services/NomaSignService.cs` | Access-token cache + Integration API orchestration |
-| `.NET and React/frontend/src/app/integration-demo.tsx` | UI walking through the integration flow |
+The [.NET and React example](.NET%20and%20React/README.md) walks through the same flow with a UI: paste your credentials, list your templates, send one, and watch the webhook arrive. See its README for prerequisites and run instructions.

@@ -10,12 +10,13 @@ const API = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:5203";
 const PROD_API_URL = "https://integration.nomasign.com";
 const CUSTOM_URLS_KEY = "nomasign_demo_custom_api_urls";
 const SELECTED_URL_KEY = "nomasign_demo_selected_api_url";
-const DOCS_BASE = "https://github.com/Nomasign/IntegrationExamples/blob/main/docs";
+const REPO_URL = "https://github.com/Nomasign/IntegrationExamples";
+const DOCS_BASE = `${REPO_URL}/blob/main/docs`;
 
-function ProcessDocLink({ domain, label }: { domain: string; label?: string }) {
+function ProcessDocLink({ href, label }: { href: string; label?: string }) {
   return (
     <a
-      href={`${DOCS_BASE}/${domain}/index.md`}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
       className="inline-flex min-h-9 items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm font-semibold text-primary shadow-sm transition-colors hover:border-primary hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -350,7 +351,7 @@ export function IntegrationDemo() {
         <p className="mt-1 text-sm text-muted-foreground">
           Store your long-lived refresh token, then exchange it for a short-lived access token. The access token is cached server-side and used as the Bearer token in Steps 2 &amp; 3. Neither token is ever returned to the browser.
         </p>
-        <div className="mt-2 mb-4"><ProcessDocLink domain="authentication" /></div>
+        <div className="mt-2 mb-4"><ProcessDocLink href={`${REPO_URL}#quick-start`} /></div>
 
         {/* Sub-step 1.1: Refresh Token */}
         <div className="mt-5 rounded-md border border-border bg-muted/30 px-4 py-4">
@@ -423,7 +424,7 @@ export function IntegrationDemo() {
           <code className="font-mono text-xs">&lt;NAME&gt;</code>/
           <code className="font-mono text-xs">&lt;EMAIL&gt;</code> placeholders to fill in.
         </p>
-        <div className="mt-1 mb-4"><ProcessDocLink domain="templates" /></div>
+        <div className="mt-1 mb-4"><ProcessDocLink href={`${DOCS_BASE}/templates.md`} /></div>
 
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
           Paste the copied payload, then replace the placeholders
@@ -452,7 +453,7 @@ export function IntegrationDemo() {
           backend forwards it as-is and attaches the access token — no token ever reaches the
           browser.
         </p>
-        <div className="mt-1 mb-4"><ProcessDocLink domain="templates" /></div>
+        <div className="mt-1 mb-4"><ProcessDocLink href={`${DOCS_BASE}/templates.md`} /></div>
 
         <RequestBuilder
           method="POST"
@@ -491,7 +492,7 @@ export function IntegrationDemo() {
           When signing completes, NomaSign POSTs HMAC-signed events to your webhook endpoint.
           This step requires your backend to be publicly reachable (deployed or via a tunnel — we recommend VS Code Dev Tunnels).
         </p>
-        <div className="mt-1 mb-4"><ProcessDocLink domain="webhooks" /></div>
+        <div className="mt-1 mb-4"><ProcessDocLink href={`${DOCS_BASE}/webhooks.md`} /></div>
 
         {/* HMAC Secret config */}
         <div className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-3">
