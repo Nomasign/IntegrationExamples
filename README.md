@@ -27,6 +27,8 @@ curl -X POST "https://integration.nomasign.com/connect/token" \
 
 Store the refresh token in a secrets manager — never in source code or frontend code. The access token is used as a `Bearer` token on all API calls and should never leave your backend.
 
+**Refresh tokens rotate.** Every exchange returns a new `refresh_token`: store it in place of the old one. The previous token keeps working for 5 minutes, so processes that refresh at the same moment all succeed. Using an older token after that is treated as a leaked token and revokes all tokens of the integration; generate new ones in the NomaSign dashboard.
+
 **3. Send a template for signature:**
 
 ```bash

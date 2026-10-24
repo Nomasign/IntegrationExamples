@@ -6,9 +6,10 @@ namespace Backend.Signing.Models;
 // These match the JSON shapes the NomaSign Integration API sends/receives.
 // They are internal to the backend — the frontend never sees these directly.
 
-/// <summary>Response from POST /connect/token.</summary>
+/// <summary>Response from POST /connect/token. RefreshToken replaces the one that was exchanged.</summary>
 public record TokenResponse(
     [property: JsonPropertyName("access_token")] string AccessToken,
+    [property: JsonPropertyName("refresh_token")] string RefreshToken,
     [property: JsonPropertyName("expires_in")] int ExpiresIn,
     [property: JsonPropertyName("token_type")] string TokenType);
 

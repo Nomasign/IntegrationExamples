@@ -12,7 +12,7 @@ You'll also need at least one **Signing Template** — go to **Templates** in th
 
 ## Technical Requirements
 
-- .NET 8 SDK
+- .NET 10 SDK
 - Node.js 18+
 - [pnpm](https://pnpm.io/installation) — install with `npm install -g pnpm` or see [pnpm docs](https://pnpm.io/installation) for other methods
 

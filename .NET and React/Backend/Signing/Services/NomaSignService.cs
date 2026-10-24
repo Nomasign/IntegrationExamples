@@ -112,6 +112,9 @@ public class NomaSignService : INomaSignService
                     "No refresh token configured. Save it via POST /api/config/refresh-token first.");
 
             var result = await _client.ExchangeTokenAsync(refreshToken);
+            // Refresh tokens rotate: every exchange returns a new one, and the old one stops
+            // working shortly after. Store it right away, before anything else can fail.
+            await _secretStore.SetSecretAsync(RefreshTokenKey, result.RefreshToken);
             var subscriptionExpiry = ExtractSubscriptionExpiry(result.AccessToken);
 
             _accessToken = result.AccessToken;
