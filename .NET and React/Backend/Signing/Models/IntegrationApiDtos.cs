@@ -18,8 +18,9 @@ public record TokenResponse(
 // DTO here. See TemplatesController.Send / NomaSignClient.SendRawAsync.
 
 /// <summary>Webhook payload delivered by NomaSign to our endpoint.</summary>
-public record WebhookPayload(string Id, string Type, string ApiVersion, DateTime CreatedAt, WebhookSession? Session);
+public record WebhookPayload(string Id, string Type, string ApiVersion, DateTime CreatedAt, WebhookSigner? Signer, WebhookSession? Session);
+public record WebhookSigner(string Label, string Name, string Email);
 public record WebhookSession(Guid Id, Guid? TemplateId, DateTime? CompletedAt, List<WebhookRecipient>? Recipients, List<WebhookDocument>? Documents);
-public record WebhookRecipient(string Label, string Name, string Email, string Status, DateTime? SignedAt, DateTime? DeclinedAt);
+public record WebhookRecipient(string Label, string Name, string Email, string Status, DateTime? SignedAt, DateTime? DeclinedAt, string? DeclineReason);
 public record WebhookDocument(string Document, string? CloudDocumentId, List<WebhookField>? Fields);
 public record WebhookField(string Label, string Type, string? Recipient, string? Value);

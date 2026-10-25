@@ -34,21 +34,33 @@ X-NomaSign-Environment: production
 {
   "id": "evt_...",
   "type": "signing_session.completed",
-  "apiVersion": "1",
+  "apiVersion": "2026-05-01",
   "createdAt": "2026-07-01T12:00:00Z",
+  "signer": { "label": "Signer 1", "name": "Thabo Nkosi", "email": "thabo.nkosi@nomasign.com" },
   "session": {
     "id": "abc-123",
     "templateId": "template-456",
     "completedAt": "2026-07-01T12:00:00Z",
     "recipients": [
-      { "label": "Signer 1", "name": "Thabo Nkosi", "email": "thabo.nkosi@nomasign.com", "status": "signed", "signedAt": "2026-07-01T11:59:58Z" }
+      { "label": "Signer 1", "name": "Thabo Nkosi", "email": "thabo.nkosi@nomasign.com", "status": "Signed", "signedAt": "2026-07-01T11:59:58Z", "declinedAt": null, "declineReason": null }
     ],
     "documents": [
-      { "document": "contract.pdf", "cloudDocumentId": "b!x1...", "fields": [] }
+      {
+        "document": "contract.pdf",
+        "cloudDocumentId": "b!x1...",
+        "fields": [
+          { "label": "Company name", "type": "Text", "recipient": "Signer 1", "value": "Nkosi Holdings" }
+        ]
+      }
     ]
   }
 }
 ```
+
+- `signer` is the recipient whose action triggered the event (on `signing_session.declined`, the one who declined). It is `null` for events without an acting signer, such as `signing_session.cancelled`.
+- `cloudDocumentId` is the id of the document in the sender's own OneDrive or Google Drive: the fully signed copy once the session is complete, otherwise the current working copy. The webhook carries no file bytes; fetch the file from the drive if you need it.
+- `fields` lists the values signers entered. Signature and initials fields are left out.
+- `templateId` is `null` for sessions sent from your own PDFs (`POST /api/sessions/send`).
 
 See `WebhookPayload` in [`IntegrationApiDtos.cs`](../.NET%20and%20React/Backend/Signing/Models/IntegrationApiDtos.cs) for the full parsed shape.
 
@@ -95,7 +107,7 @@ public static bool VerifySignature(string header, string body, string secret)
 
 ## Delivery rules
 
-- If your endpoint doesn't respond `2xx`, NomaSign retries with exponential backoff; after exhausting retries the event is dropped — design for reconciliation of missed events.
+- If your endpoint doesn't respond `2xx` within 10 seconds, NomaSign tries again up to 6 attempts in total: after 1 minute, 5 minutes, 30 minutes, 1 day and 1 day 1 hour. After the last attempt the event is dropped, so design for reconciliation of missed events. A webhook that fails 20 deliveries in a row is disabled automatically.
 - The same event may be delivered more than once — make your handler **idempotent** (use the delivery/event id as a deduplication key).
 - Respond within a few seconds; queue longer work.
 - One webhook URL per integration entry — fan out internally if multiple services need the event.
